@@ -110,8 +110,10 @@ function Library:CreateWindow(cfg)
     tabBar.Parent = main
     make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
         BackgroundColor3 = T.border, BorderSizePixel = 0 }).Parent = tabBar
+    tabBar.ClipsDescendants = true
     make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
-        VerticalAlignment = Enum.VerticalAlignment.Center }).Parent = tabBar
+        HorizontalAlignment = Enum.HorizontalAlignment.Left, VerticalAlignment = Enum.VerticalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder }).Parent = tabBar
     self.tabBar = tabBar
 
     local content = make("Frame", { Name = "Content", Size = UDim2.new(1, 0, 1, -104),
@@ -151,8 +153,8 @@ function Library:CreateWindow(cfg)
     UserInputService.InputChanged:Connect(function(inp)
         if resizing and inp.UserInputType == Enum.UserInputType.MouseMovement then
             local d = inp.Position - rStart
-            local w = math.clamp(rSize.X + d.X, 420, 900)
-            local h = math.clamp(rSize.Y + d.Y, 320, 800)
+            local w = math.clamp(rSize.X + d.X, 480, 680)
+            local h = math.clamp(rSize.Y + d.Y, 340, 700)
             main.Size = UDim2.new(0, w, 0, h)
         end
     end)
@@ -175,6 +177,12 @@ function Library:CreateWindow(cfg)
             if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
             end
+        else
+            -- UI ซ่อน → ซ่อนเมาส์ + ล็อกกลางจอ (คืนให้เกมเล่นปกติ)
+            if UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = false end
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            end
         end
     end)
 
@@ -192,6 +200,7 @@ function Library:CreateTab(name)
 
     local tabW = math.max(64, #name * 9 + 26)   -- กว้างตามยาวชื่อ (fixed = เชื่อถือได้)
     local btn = make("TextButton", { Name = name, Size = UDim2.new(0, tabW, 0, 32),
+        LayoutOrder = #win.tabs + 1,   -- เรียงตามลำดับสร้าง (กันเรียงมั่ว)
         BackgroundColor3 = Color3.fromRGB(24, 34, 54), BackgroundTransparency = 1, AutoButtonColor = false,
         Text = "", BorderSizePixel = 0 }, { corner(9) })
     btn.Parent = win.tabBar
@@ -289,6 +298,7 @@ function Library:CreateTab(name)
                         if inp.KeyCode == Enum.KeyCode.Backspace then bindKey = Enum.KeyCode.Unknown
                         else bindKey = inp.KeyCode end
                         kbox.Text = keyName(bindKey); kbox.TextColor3 = T.text2
+                        if o.BindCallback then o.BindCallback(bindKey) end   -- ← ส่งกลับให้ main เซฟ
                     elseif not listening and not gpe and inp.UserInputType == Enum.UserInputType.Keyboard
                         and bindKey ~= Enum.KeyCode.Unknown and inp.KeyCode == bindKey then
                         set(not state, true)
@@ -428,16 +438,41 @@ function Library:CreateTab(name)
         function C:Button(o)
             o = o or {}
             if order > 1 then sep() end
-            local b = make("TextButton", { Size = UDim2.new(1, 0, 0, 34), LayoutOrder = order,
+            local hasBind = o.Bind
+            local row = make("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = order })
+            order = order + 1; row.Parent = card
+            local b = make("TextButton", { Size = hasBind and UDim2.new(1, -92, 1, 0) or UDim2.new(1, 0, 1, 0),
                 BackgroundColor3 = o.Danger and Color3.fromRGB(60,26,30) or T.hover, BorderSizePixel = 0,
                 AutoButtonColor = false, Text = o.Name or "Button", Font = FONT_M, TextSize = 13,
                 TextColor3 = o.Danger and Color3.fromRGB(240,120,120) or T.text },
                 { corner(8), stroke(o.Danger and Color3.fromRGB(90,40,45) or T.border, 1) })
-            order = order + 1; b.Parent = card
+            b.Parent = row
             b.MouseButton1Click:Connect(function() if o.Callback then o.Callback() end end)
             local baseC = b.BackgroundColor3
             b.MouseEnter:Connect(function() tween(b, 0.15, { BackgroundColor3 = T.border }) end)
             b.MouseLeave:Connect(function() tween(b, 0.15, { BackgroundColor3 = baseC }) end)
+
+            if hasBind then
+                local bindKey = o.BindDefault or Enum.KeyCode.Unknown
+                local kbox = make("TextButton", { Size = UDim2.new(0, 84, 1, 0), Position = UDim2.new(1, -84, 0, 0),
+                    BackgroundColor3 = T.hover, BorderSizePixel = 0, AutoButtonColor = false, Text = keyName(bindKey),
+                    Font = Enum.Font.RobotoMono, TextSize = 11, TextColor3 = T.text2 }, { corner(7), stroke(T.border, 1) })
+                kbox.Parent = row
+                local listening = false
+                kbox.MouseButton1Click:Connect(function() listening = true; kbox.Text = "..."; kbox.TextColor3 = T.accent end)
+                UserInputService.InputBegan:Connect(function(inp, gpe)
+                    if listening and inp.UserInputType == Enum.UserInputType.Keyboard then
+                        listening = false
+                        if inp.KeyCode == Enum.KeyCode.Backspace then bindKey = Enum.KeyCode.Unknown
+                        else bindKey = inp.KeyCode end
+                        kbox.Text = keyName(bindKey); kbox.TextColor3 = T.text2
+                        if o.BindCallback then o.BindCallback(bindKey) end
+                    elseif not listening and not gpe and inp.UserInputType == Enum.UserInputType.Keyboard
+                        and bindKey ~= Enum.KeyCode.Unknown and inp.KeyCode == bindKey then
+                        if o.Callback then o.Callback() end
+                    end
+                end)
+            end
             return b
         end
 
