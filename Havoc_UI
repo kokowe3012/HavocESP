@@ -309,7 +309,8 @@ function Library:CreateTab(name)
             thumb.Parent = track
             local valLbl = make("TextLabel", { Size = UDim2.new(0, 56, 1, 0), Position = UDim2.new(1, -56, 0, 0),
                 BackgroundTransparency = 1, Text = tostring(val) .. (o.Suffix and (" "..o.Suffix) or ""),
-                Font = FONT_M, TextSize = 12, TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Right }).Parent = row
+                Font = FONT_M, TextSize = 12, TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Right })
+            valLbl.Parent = row
 
             local function setFromX(px)
                 local rel = math.clamp((px - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
