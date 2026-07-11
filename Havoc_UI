@@ -186,6 +186,38 @@ function Library:CreateWindow(cfg)
         end
     end)
 
+    -- ── Toast notification (ขวาล่าง ซ้อนขึ้นบน) ──────────────────────
+    local notifHolder = make("Frame", { Name = "Notifs", AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -16, 1, -16), Size = UDim2.new(0, 250, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+    notifHolder.Parent = sg
+    make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder,
+        VerticalAlignment = Enum.VerticalAlignment.Bottom, HorizontalAlignment = Enum.HorizontalAlignment.Right }).Parent = notifHolder
+    self._notifN = 0
+
+    function self:Notify(text, state)
+        self._notifN = self._notifN + 1
+        local accent = (state == true) and Color3.fromRGB(46, 204, 113)
+            or (state == false) and Color3.fromRGB(231, 76, 60) or T.accent
+        local toast = make("CanvasGroup", { Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = T.card,
+            BorderSizePixel = 0, GroupTransparency = 1, LayoutOrder = self._notifN },
+            { corner(9), stroke(T.border, 1) })
+        make("Frame", { Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 0, 0, 6),
+            BackgroundColor3 = accent, BorderSizePixel = 0 }, { corner(2) }).Parent = toast
+        make("TextLabel", { Size = UDim2.new(1, -22, 1, 0), Position = UDim2.new(0, 14, 0, 0),
+            BackgroundTransparency = 1, Text = text, TextColor3 = T.text, Font = FONT_M, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }).Parent = toast
+        toast.Parent = notifHolder
+        tween(toast, 0.22, { GroupTransparency = 0 })
+        task.delay(2, function()
+            if toast and toast.Parent then
+                tween(toast, 0.3, { GroupTransparency = 1 })
+                task.wait(0.32)
+                pcall(function() toast:Destroy() end)
+            end
+        end)
+    end
+
     function self:Destroy()
         if self._mouseConn then pcall(function() self._mouseConn:Disconnect() end) end
         pcall(function() self.gui:Destroy() end)
