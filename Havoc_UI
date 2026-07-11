@@ -347,8 +347,10 @@ function Library:CreateTab(name)
             o = o or {}
             local min, max = o.Min or 0, o.Max or 100
             local val = o.Default or min
+            local vw = o.Format and 118 or 56        -- readout กว้างขึ้นถ้ามี Format
+            local function fmt(v) if o.Format then return o.Format(v) end return tostring(v)..(o.Suffix and (" "..o.Suffix) or "") end
             local row = rowBase(o.Name or "Slider")
-            local track = make("Frame", { Size = UDim2.new(0, 150, 0, 5), Position = UDim2.new(1, -210, 0.5, -2),
+            local track = make("Frame", { Size = UDim2.new(0, 140, 0, 5), Position = UDim2.new(1, -(vw + 150), 0.5, -2),
                 BackgroundColor3 = T.border, BorderSizePixel = 0 }, { corner(3) })
             track.Parent = row
             local fill = make("Frame", { Size = UDim2.new((val-min)/(max-min), 0, 1, 0),
@@ -357,8 +359,8 @@ function Library:CreateTab(name)
             local thumb = make("Frame", { Size = UDim2.new(0, 15, 0, 15), Position = UDim2.new((val-min)/(max-min), -7, 0.5, -7),
                 BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0, ZIndex = 3 }, { corner(8), stroke(T.accent, 2) })
             thumb.Parent = track
-            local valLbl = make("TextLabel", { Size = UDim2.new(0, 56, 0, 34), Position = UDim2.new(1, -56, 0.5, -17),
-                BackgroundTransparency = 1, Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or ""),
+            local valLbl = make("TextLabel", { Size = UDim2.new(0, vw, 0, 34), Position = UDim2.new(1, -vw, 0.5, -17),
+                BackgroundTransparency = 1, Text = fmt(val),
                 Font = FONT_M, TextSize = 12, TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Right })
             valLbl.Parent = row
             local function setFromX(px)
@@ -366,7 +368,7 @@ function Library:CreateTab(name)
                 if o.Decimals then local m = 10^o.Decimals; val = math.floor((min+(max-min)*rel)*m+0.5)/m
                 else val = math.floor((min+(max-min)*rel)+0.5) end
                 fill.Size = UDim2.new(rel, 0, 1, 0); thumb.Position = UDim2.new(rel, -7, 0.5, -7)
-                valLbl.Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or "")
+                valLbl.Text = fmt(val)
                 if o.Callback then o.Callback(val) end
             end
             local sliding = false
@@ -374,6 +376,31 @@ function Library:CreateTab(name)
             UserInputService.InputChanged:Connect(function(inp) if sliding and inp.UserInputType == Enum.UserInputType.MouseMovement then setFromX(inp.Position.X) end end)
             UserInputService.InputEnded:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then sliding=false end end)
             return { Set = function(v) local rel=(v-min)/(max-min); setFromX(track.AbsolutePosition.X + track.AbsoluteSize.X*rel) end, Get = function() return val end }
+        end
+
+        -- INPUT (ช่องใส่ตัวเลข — apply ตอน enter/หลุด focus ไม่กระตุก)
+        function C:Input(o)
+            o = o or {}
+            local val = o.Default or 0
+            local row = rowBase(o.Name or "Input")
+            local box = make("TextBox", { Size = UDim2.new(0, 96, 0, 26), Position = UDim2.new(1, -96, 0.5, -13),
+                BackgroundColor3 = T.hover, BorderSizePixel = 0, Text = tostring(val), Font = Enum.Font.RobotoMono,
+                TextSize = 12, TextColor3 = T.text, ClearTextOnFocus = false,
+                TextXAlignment = Enum.TextXAlignment.Center }, { corner(7), stroke(T.border, 1) })
+            box.Parent = row
+            box.FocusLost:Connect(function()
+                local n = tonumber(box.Text)
+                if n then
+                    if o.Min then n = math.max(n, o.Min) end
+                    if o.Max then n = math.min(n, o.Max) end
+                    val = n
+                end
+                box.Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or "")
+                if o.Callback then o.Callback(val) end
+            end)
+            box.Focused:Connect(function() box.Text = tostring(val) end)
+            box.Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or "")
+            return { Set = function(v) val = v; box.Text = tostring(v)..(o.Suffix and (" "..o.Suffix) or "") end, Get = function() return val end }
         end
 
         -- DROPDOWN (multi-select + search)
