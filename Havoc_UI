@@ -106,7 +106,7 @@ function Library:CreateWindow(cfg)
 
     -- tab bar (scroll แนวนอน กันแท็บล้น)
     local tabBar = make("Frame", { Name = "TabBar", Size = UDim2.new(1, 0, 0, 46),
-        Position = UDim2.new(0, 0, 0, 58), BackgroundColor3 = T.bg, BorderSizePixel = 0, ClipsDescendants = true }, { pad(7, 0, 14, 14) })
+        Position = UDim2.new(0, 0, 0, 58), BackgroundColor3 = T.bg, BorderSizePixel = 0 }, { pad(7, 0, 14, 14) })
     tabBar.Parent = main
     make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
         HorizontalAlignment = Enum.HorizontalAlignment.Left, VerticalAlignment = Enum.VerticalAlignment.Center,
