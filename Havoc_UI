@@ -1,3 +1,14 @@
+--[[  HAVOC UI Library v2.1  — host บน GitHub เรียกแบบ Rayfield
+    local Lib = loadstring(game:HttpGet(URL))()
+    local Win = Lib:CreateWindow({ Title="HAVOC", Sub="External Framework", Version="2.0" })
+    local tab = Win:CreateTab("ESP")
+    local card = tab:CreateCard("ESP Settings")
+    card:Toggle({ Name="Enable ESP", Default=false, Bind=true, Callback=function(v) end })
+    card:Slider({ Name="FOV", Min=80, Max=200, Default=90, Suffix="", Callback=function(v) end })
+    card:Dropdown({ Name="Items", Options={...}, Multi=true, Search=true, Callback=function(sel) end })
+    card:Button({ Name="Do it", Callback=function() end })
+--]]
+
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
@@ -5,13 +16,13 @@ local Players          = game:GetService("Players")
 local LocalPlayer      = Players.LocalPlayer
 
 local T = {
-    bg     = Color3.fromRGB(15, 17, 23),
-    card   = Color3.fromRGB(23, 27, 34),
-    border = Color3.fromRGB(42, 49, 64),
-    hover  = Color3.fromRGB(33, 40, 53),
-    accent = Color3.fromRGB(59, 130, 246),
+    bg     = Color3.fromRGB(18, 16, 20),
+    card   = Color3.fromRGB(28, 25, 30),
+    border = Color3.fromRGB(55, 48, 42),
+    hover  = Color3.fromRGB(38, 34, 38),
+    accent = Color3.fromRGB(255, 140, 0),
     text   = Color3.fromRGB(255, 255, 255),
-    text2  = Color3.fromRGB(154, 164, 178),
+    text2  = Color3.fromRGB(140, 140, 150),
 }
 local FONT   = Enum.Font.Gotham
 local FONT_M = Enum.Font.GothamMedium
@@ -77,7 +88,7 @@ function Library:CreateWindow(cfg)
         BackgroundColor3 = T.border, BorderSizePixel = 0, ZIndex = 2 }).Parent = header
 
     local logo = make("Frame", { Size = UDim2.new(0, 38, 0, 38), Position = UDim2.new(0, 0, 0.5, -19),
-        BackgroundColor3 = Color3.fromRGB(24, 34, 54), BorderSizePixel = 0, ZIndex = 3 }, { corner(10) })
+        BackgroundColor3 = Color3.fromRGB(45, 35, 20), BorderSizePixel = 0, ZIndex = 3 }, { corner(10) })
     logo.Parent = header
     make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "H",
         Font = FONT_B, TextSize = 20, TextColor3 = T.accent, ZIndex = 3 }).Parent = logo
@@ -89,10 +100,10 @@ function Library:CreateWindow(cfg)
         BackgroundTransparency = 1, Text = cfg.Sub or "External Framework", Font = FONT, TextSize = 12,
         TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 }).Parent = header
     local verBadge = make("Frame", { Size = UDim2.new(0, 92, 0, 24), Position = UDim2.new(1, -92, 0.5, -12),
-        BackgroundColor3 = T.bg, BorderSizePixel = 0, ZIndex = 3 }, { corner(20), stroke(T.border, 1) })
+        BackgroundColor3 = T.bg, BorderSizePixel = 0, ZIndex = 3 }, { corner(20), stroke(T.accent, 1) })
     verBadge.Parent = header
     make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
-        Text = "Version " .. (cfg.Version or "2.0"), Font = FONT_M, TextSize = 11, TextColor3 = T.text2, ZIndex = 3 }).Parent = verBadge
+        Text = "Version " .. (cfg.Version or "2.0"), Font = FONT_M, TextSize = 11, TextColor3 = T.accent, ZIndex = 3 }).Parent = verBadge
 
     -- tab bar (scroll แนวนอน กันแท็บล้น)
     local tabBar = make("Frame", { Name = "TabBar", Size = UDim2.new(1, 0, 0, 46),
@@ -187,8 +198,8 @@ function Library:CreateWindow(cfg)
 
     function self:Notify(text, state)
         self._notifN = self._notifN + 1
-        local accent = (state == true) and Color3.fromRGB(46, 204, 113)
-            or (state == false) and Color3.fromRGB(231, 76, 60) or T.accent
+        local accent = (state == true) and Color3.fromRGB(255, 180, 50)
+            or (state == false) and Color3.fromRGB(200, 60, 40) or T.accent
         local toast = make("CanvasGroup", { Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = T.card,
             BorderSizePixel = 0, GroupTransparency = 1, LayoutOrder = self._notifN },
             { corner(9), stroke(T.border, 1) })
@@ -226,8 +237,8 @@ function Library:CreateTab(name)
 
     local tabW = math.max(64, #name * 9 + 26)   -- กว้างตามยาวชื่อ (fixed = เชื่อถือได้)
     local btn = make("TextButton", { Name = name, Size = UDim2.new(0, tabW, 0, 32),
-        LayoutOrder = #win.tabs + 1,   -- เรียงตามลำดับสร้าง (กันเรียงมั่ว)
-        BackgroundColor3 = Color3.fromRGB(24, 34, 54), BackgroundTransparency = 1, AutoButtonColor = false,
+        LayoutOrder = #win.tabs + 1,
+        BackgroundColor3 = T.accent, BackgroundTransparency = 1, AutoButtonColor = false,
         Text = "", BorderSizePixel = 0 }, { corner(9) })
     btn.Parent = win.tabBar
     local btnLbl = make("TextLabel", { Size = UDim2.new(1, 0, 1, 0),
@@ -269,7 +280,7 @@ function Library:CreateTab(name)
             local head = make("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, LayoutOrder = 0 })
             head.Parent = card
             make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = string.upper(cardName),
-                Font = FONT_B, TextSize = 11, TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left }).Parent = head
+                Font = FONT_B, TextSize = 11, TextColor3 = T.accent, TextXAlignment = Enum.TextXAlignment.Left }).Parent = head
         end
 
         local C = {}
