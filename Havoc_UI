@@ -1,209 +1,576 @@
-var SHEET_NAME     = "Havoc";
-var SPREADSHEET_ID = "1AMHqgYjdR0MABOGp7Ki999M6aWhXuP3730UQuHqOKlQ";
-var SECRET         = "H@v0c!ESP#2026$xKq9";
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local LocalPlayer      = Players.LocalPlayer
 
-// Columns: key | hwid | created_at | expires_at | premium | day | hour | source
-var COL_KEY        = 1;
-var COL_HWID       = 2;
-var COL_CREATED_AT = 3;
-var COL_EXPIRES_AT = 4;
-var COL_PREMIUM    = 5;
-var COL_DAY        = 6;
-var COL_HOUR       = 7;
-var COL_SOURCE     = 8;
-
-// ── Security ─────────────────────────────────────────────────────
-function fnvSign(payload) {
-  var h = 2166136261;
-  for (var i = 0; i < payload.length; i++) {
-    h = Math.imul(h, 16777619) >>> 0;
-    h = (h + payload.charCodeAt(i)) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
+local T = {
+    bg     = Color3.fromRGB(15, 17, 23),
+    card   = Color3.fromRGB(23, 27, 34),
+    border = Color3.fromRGB(42, 49, 64),
+    hover  = Color3.fromRGB(33, 40, 53),
+    accent = Color3.fromRGB(59, 130, 246),
+    text   = Color3.fromRGB(255, 255, 255),
+    text2  = Color3.fromRGB(154, 164, 178),
 }
+local FONT   = Enum.Font.Gotham
+local FONT_M = Enum.Font.GothamMedium
+local FONT_B = Enum.Font.GothamBold
 
-function checkSignature(key, hwid, ts, sig) {
-  var nowWindow = Math.floor(Date.now() / 1000 / 300);
-  var reqWindow = parseInt(ts) || 0;
-  if (Math.abs(nowWindow - reqWindow) > 1) return "expired";
-  if (fnvSign(key + hwid + ts + SECRET) !== sig) return "invalid";
-  return "ok";
-}
+local function make(class, props, kids)
+    local o = Instance.new(class)
+    for k, v in pairs(props or {}) do o[k] = v end
+    for _, c in pairs(kids or {}) do c.Parent = o end
+    return o
+end
+local function corner(r) return make("UICorner", { CornerRadius = UDim.new(0, r or 8) }) end
+local function stroke(col, th) return make("UIStroke", { Color = col or T.border, Thickness = th or 1 }) end
+local function pad(a, b, c, d)
+    return make("UIPadding", { PaddingTop = UDim.new(0, a), PaddingBottom = UDim.new(0, b or a),
+        PaddingLeft = UDim.new(0, c or a), PaddingRight = UDim.new(0, d or c or a) })
+end
+local function tween(o, t, props)
+    TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+end
+local function keyName(k)
+    if not k or k == Enum.KeyCode.Unknown then return "NONE" end
+    return string.upper(k.Name)
+end
+local function guiParent()
+    local ok, hui = pcall(function() return gethui() end)
+    if ok and hui then return hui end
+    local ok2, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok2 and cg then return cg end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
 
-function rateLimitCheck(hwid) {
-  var cache  = CacheService.getScriptCache();
-  var rlKey  = "rl_" + hwid;
-  var count  = parseInt(cache.get(rlKey) || "0");
-  if (count >= 10) return false;
-  cache.put(rlKey, (count + 1).toString(), 60);
-  return true;
-}
+local Library = {}
+Library.__index = Library
 
-// ── Main ─────────────────────────────────────────────────────────
-function doGet(e) {
-  var action = (e.parameter.action || "").toLowerCase();
-  var result;
+function Library:CreateWindow(cfg)
+    cfg = cfg or {}
+    local self = setmetatable({}, Library)
+    self.tabs = {}
+    self.activeTab = nil
 
-  if (action === "verify") {
-    var key  = e.parameter.key  || "";
-    var hwid = e.parameter.hwid || "";
-    var ts   = e.parameter.ts   || "";
-    var sig  = e.parameter.sig  || "";
+    local existing = guiParent():FindFirstChild("HAVOC_UI_LIB")
+    if existing then existing:Destroy() end
 
-    var sigCheck = checkSignature(key, hwid, ts, sig);
-    if (sigCheck === "expired") {
-      result = { valid: false, message: "Request expired" };
-    } else if (sigCheck === "invalid") {
-      result = { valid: false, message: "Invalid request" };
-    } else if (!rateLimitCheck(hwid)) {
-      result = { valid: false, message: "Too many requests, please wait." };
-    } else {
-      result = verify(key, hwid);
-    }
-  } else if (action === "addkey") {
-    var adminSig = e.parameter.adminsig || "";
-    if (fnvSign("addkey" + SECRET) !== adminSig) {
-      result = { success: false, message: "Unauthorized" };
-    } else {
-      var newKey  = e.parameter.newkey || randomKey(16);
-      var premium = true;
-      var day     = parseInt(e.parameter.day) || 0;
-      var hour    = parseInt(e.parameter.hour) || 24;
-      var source  = e.parameter.source || "";
-      getSheet().appendRow([newKey, "", "", "", premium, day, hour, source]);
-      result = { success: true, key: newKey };
-    }
-  } else if (action === "resethwid") {
-    var adminSig = e.parameter.adminsig || "";
-    if (fnvSign("resethwid" + SECRET) !== adminSig) {
-      result = { success: false, message: "Unauthorized" };
-    } else {
-      var targetKey = e.parameter.key || "";
-      result = resetHwid(targetKey);
-    }
-  } else {
-    result = { error: "Unknown action" };
-  }
+    local sg = make("ScreenGui", { Name = "HAVOC_UI_LIB", ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 9999 })
+    pcall(function() sg.Parent = guiParent() end)
+    self.gui = sg
 
-  return ContentService
-    .createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+    local main = make("Frame", { Name = "Main", Size = UDim2.new(0, 560, 0, 560),
+        Position = UDim2.new(0.5, -280, 0.5, -280), BackgroundColor3 = T.bg, BorderSizePixel = 0 },
+        { corner(15), stroke(T.border, 1) })
+    main.Parent = sg
+    self.main = main
 
-// ── Verify ───────────────────────────────────────────────────────
-function verify(key, hwid) {
-  if (!key || !hwid) return { valid: false, message: "Missing key or hwid" };
-  var sheet = getSheet();
-  var data  = sheet.getDataRange().getValues();
+    -- header
+    local header = make("Frame", { Name = "Header", Size = UDim2.new(1, 0, 0, 58),
+        BackgroundColor3 = T.bg, BorderSizePixel = 0 }, { pad(0, 0, 20, 20), corner(15) })
+    header.Parent = main
+    make("Frame", { Size = UDim2.new(1, 0, 0.5, 0), Position = UDim2.new(0, 0, 0.5, 0),
+        BackgroundColor3 = T.bg, BorderSizePixel = 0 }).Parent = header  -- กันมุมโค้งเว้าบน header
+    make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
+        BackgroundColor3 = T.border, BorderSizePixel = 0, ZIndex = 2 }).Parent = header
 
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i];
-    if (String(row[COL_KEY - 1]) !== String(key)) continue;
+    local logo = make("Frame", { Size = UDim2.new(0, 38, 0, 38), Position = UDim2.new(0, 0, 0.5, -19),
+        BackgroundColor3 = Color3.fromRGB(24, 34, 54), BorderSizePixel = 0, ZIndex = 3 }, { corner(10) })
+    logo.Parent = header
+    make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "H",
+        Font = FONT_B, TextSize = 20, TextColor3 = T.accent, ZIndex = 3 }).Parent = logo
+    local titleLabel = make("TextLabel", { Position = UDim2.new(0, 50, 0, 12), Size = UDim2.new(0, 200, 0, 20),
+        BackgroundTransparency = 1, Text = cfg.Title or "HAVOC", Font = FONT_B, TextSize = 17,
+        TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 })
+    titleLabel.Parent = header
+    make("TextLabel", { Position = UDim2.new(0, 50, 0, 32), Size = UDim2.new(0, 260, 0, 16),
+        BackgroundTransparency = 1, Text = cfg.Sub or "External Framework", Font = FONT, TextSize = 12,
+        TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 }).Parent = header
+    local verBadge = make("Frame", { Size = UDim2.new(0, 92, 0, 24), Position = UDim2.new(1, -92, 0.5, -12),
+        BackgroundColor3 = T.bg, BorderSizePixel = 0, ZIndex = 3 }, { corner(20), stroke(T.border, 1) })
+    verBadge.Parent = header
+    make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+        Text = "Version " .. (cfg.Version or "2.0"), Font = FONT_M, TextSize = 11, TextColor3 = T.text2, ZIndex = 3 }).Parent = verBadge
 
-    var storedHwid = row[COL_HWID - 1] ? String(row[COL_HWID - 1]) : "";
-    var expiresStr = row[COL_EXPIRES_AT - 1] ? String(row[COL_EXPIRES_AT - 1]) : "";
-    var isPremium  = row[COL_PREMIUM - 1] === true || String(row[COL_PREMIUM - 1]).toUpperCase() === "TRUE";
-    var customDay  = Number(row[COL_DAY - 1]) || 0;
-    var customHour = Number(row[COL_HOUR - 1]);
-    if (isNaN(customHour)) customHour = 24;
+    -- tab bar (scroll แนวนอน กันแท็บล้น)
+    local tabBar = make("Frame", { Name = "TabBar", Size = UDim2.new(1, 0, 0, 46),
+        Position = UDim2.new(0, 0, 0, 58), BackgroundColor3 = T.bg, BorderSizePixel = 0 }, { pad(7, 0, 14, 14) })
+    tabBar.Parent = main
+    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
+        HorizontalAlignment = Enum.HorizontalAlignment.Left, VerticalAlignment = Enum.VerticalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder }).Parent = tabBar
+    self.tabBar = tabBar
+    -- เส้นขอบล่าง tab bar (แยกออกจาก tabBar กัน UIListLayout จับไปเรียง)
+    make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, 103),
+        BackgroundColor3 = T.border, BorderSizePixel = 0 }).Parent = main
 
-    var now = new Date();
+    local content = make("Frame", { Name = "Content", Size = UDim2.new(1, 0, 1, -104),
+        Position = UDim2.new(0, 0, 0, 104), BackgroundTransparency = 1, ClipsDescendants = true })
+    content.Parent = main
+    self.content = content
 
-    // First use: activate key + lock HWID + set expiry
-    if (expiresStr === "") {
-      var exp = new Date(now.getTime() + (customDay * 24 + customHour) * 3600 * 1000);
-      sheet.getRange(i + 1, COL_HWID).setValue(hwid);
-      sheet.getRange(i + 1, COL_CREATED_AT).setValue(toThai(now));
-      sheet.getRange(i + 1, COL_EXPIRES_AT).setValue(toThai(exp));
-      return { valid: true, premium: isPremium, message: "Key activated!" };
-    }
+    -- drag (จับที่ header)
+    local dragging, dragStart, startPos
+    header.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; dragStart = inp.Position; startPos = main.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = inp.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
 
-    // Expired
-    if (new Date() > parseThai(expiresStr)) {
-      return { valid: false, expired: true, message: "Key expired. Renew at Discord." };
-    }
+    -- resize handle (มุมขวาล่าง)
+    local grip = make("TextButton", { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -18, 1, -18),
+        BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 5 })
+    grip.Parent = main
+    make("TextLabel", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "◢",
+        Font = FONT, TextSize = 12, TextColor3 = T.border, ZIndex = 5 }).Parent = grip
+    local resizing, rStart, rSize
+    grip.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            resizing = true; rStart = inp.Position; rSize = main.AbsoluteSize
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if resizing and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = inp.Position - rStart
+            local w = math.clamp(rSize.X + d.X, 480, 680)
+            local h = math.clamp(rSize.Y + d.Y, 340, 700)
+            main.Size = UDim2.new(0, w, 0, h)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
+    end)
 
-    // No HWID yet (shouldn't happen but handle)
-    if (storedHwid === "") {
-      sheet.getRange(i + 1, COL_HWID).setValue(hwid);
-      return { valid: true, premium: isPremium, message: "OK" };
-    }
+    -- toggle visibility
+    self.toggleKey = cfg.ToggleKey or Enum.KeyCode.RightControl
+    UserInputService.InputBegan:Connect(function(inp, gpe)
+        if gpe then return end
+        if inp.KeyCode == self.toggleKey then main.Visible = not main.Visible end
+    end)
 
-    // Wrong device
-    if (storedHwid !== hwid) {
-      return { valid: false, message: "Key is locked to another device." };
-    }
+    -- ตอน UI เปิด: บังคับปลดล็อกเมาส์ + โชว์ cursor (override เกมทุกเฟรม)
+    -- พอปิด UI เกมคุมเมาส์กลับเอง (ไม่ต้องกด ESC)
+    self._mouseConn = RunService.RenderStepped:Connect(function()
+        if main.Visible then
+            if not UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = true end
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            end
+        else
+            -- UI ซ่อน → ซ่อนเมาส์ + ล็อกกลางจอ (คืนให้เกมเล่นปกติ)
+            if UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = false end
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            end
+        end
+    end)
 
-    // All good
-    return { valid: true, premium: isPremium, message: "OK" };
-  }
+    -- ── Toast notification (ขวาล่าง ซ้อนขึ้นบน) ──────────────────────
+    local notifHolder = make("Frame", { Name = "Notifs", AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -16, 1, -16), Size = UDim2.new(0, 250, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+    notifHolder.Parent = sg
+    make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder,
+        VerticalAlignment = Enum.VerticalAlignment.Bottom, HorizontalAlignment = Enum.HorizontalAlignment.Right }).Parent = notifHolder
+    self._notifN = 0
 
-  return { valid: false, message: "Invalid key" };
-}
+    function self:Notify(text, state)
+        self._notifN = self._notifN + 1
+        local accent = (state == true) and Color3.fromRGB(46, 204, 113)
+            or (state == false) and Color3.fromRGB(231, 76, 60) or T.accent
+        local toast = make("CanvasGroup", { Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = T.card,
+            BorderSizePixel = 0, GroupTransparency = 1, LayoutOrder = self._notifN },
+            { corner(9), stroke(T.border, 1) })
+        make("Frame", { Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 0, 0, 6),
+            BackgroundColor3 = accent, BorderSizePixel = 0 }, { corner(2) }).Parent = toast
+        make("TextLabel", { Size = UDim2.new(1, -22, 1, 0), Position = UDim2.new(0, 14, 0, 0),
+            BackgroundTransparency = 1, Text = text, TextColor3 = T.text, Font = FONT_M, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }).Parent = toast
+        toast.Parent = notifHolder
+        tween(toast, 0.22, { GroupTransparency = 0 })
+        task.delay(2, function()
+            if toast and toast.Parent then
+                tween(toast, 0.3, { GroupTransparency = 1 })
+                task.wait(0.32)
+                pcall(function() toast:Destroy() end)
+            end
+        end)
+    end
 
-// ── Reset HWID ───────────────────────────────────────────────────
-function resetHwid(key) {
-  if (!key) return { success: false, message: "No key provided" };
-  var sheet = getSheet();
-  var data  = sheet.getDataRange().getValues();
+    function self:SetTitle(text)
+        pcall(function() titleLabel.Text = text end)
+    end
 
-  for (var i = 1; i < data.length; i++) {
-    if (String(data[i][COL_KEY - 1]) !== String(key)) continue;
-    sheet.getRange(i + 1, COL_HWID).setValue("");
-    return { success: true, message: "HWID reset for key: " + key };
-  }
-  return { success: false, message: "Key not found" };
-}
+    function self:Destroy()
+        if self._mouseConn then pcall(function() self._mouseConn:Disconnect() end) end
+        pcall(function() self.gui:Destroy() end)
+    end
 
-// ── Thai time helper (UTC+7) ─────────────────────────────────────
-function toThai(date) {
-  var thai = new Date(date.getTime() + 7 * 3600 * 1000);
-  var d = thai.getUTCDate().toString().padStart(2, "0");
-  var m = (thai.getUTCMonth() + 1).toString().padStart(2, "0");
-  var y = thai.getUTCFullYear();
-  var hh = thai.getUTCHours().toString().padStart(2, "0");
-  var mm = thai.getUTCMinutes().toString().padStart(2, "0");
-  return d + "/" + m + "/" + y + " " + hh + ":" + mm;
-}
+    return self
+end
 
-function parseThai(str) {
-  if (!str) return null;
-  str = String(str);
-  // ISO format fallback
-  if (str.indexOf("T") > -1) return new Date(str);
-  // dd/mm/yyyy hh:mm
-  var parts = str.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+)/);
-  if (!parts) return new Date(str);
-  var utc = Date.UTC(Number(parts[3]), Number(parts[2]) - 1, Number(parts[1]), Number(parts[4]) - 7, Number(parts[5]));
-  return new Date(utc);
-}
+function Library:CreateTab(name)
+    local win = self
+    local tab = {}
 
-// ── Sheet helper ─────────────────────────────────────────────────
-function getSheet() {
-  var ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-  }
-  var firstCell = sheet.getRange(1, 1).getValue();
-  if (!firstCell || String(firstCell) !== "key") {
-    sheet.getRange(1, 1, 1, 8).setValues([["key", "hwid", "created_at", "expires_at", "premium", "day", "hour", "source"]]);
-    var hdr = sheet.getRange(1, 1, 1, 8);
-    hdr.setFontWeight("bold");
-    hdr.setBackground("#1a1a2e");
-    hdr.setFontColor("#ffffff");
-    sheet.setFrozenRows(1);
-    sheet.setColumnWidths(1, 8, 200);
-  }
-  return sheet;
-}
+    local tabW = math.max(64, #name * 9 + 26)   -- กว้างตามยาวชื่อ (fixed = เชื่อถือได้)
+    local btn = make("TextButton", { Name = name, Size = UDim2.new(0, tabW, 0, 32),
+        LayoutOrder = #win.tabs + 1,   -- เรียงตามลำดับสร้าง (กันเรียงมั่ว)
+        BackgroundColor3 = Color3.fromRGB(24, 34, 54), BackgroundTransparency = 1, AutoButtonColor = false,
+        Text = "", BorderSizePixel = 0 }, { corner(9) })
+    btn.Parent = win.tabBar
+    local btnLbl = make("TextLabel", { Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1, Text = name, Font = FONT_M, TextSize = 13, TextColor3 = T.text2 })
+    btnLbl.Parent = btn
 
-function randomKey(len) {
-  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  var result = "";
-  for (var i = 0; i < len; i++) {
-    if (i > 0 && i % 4 === 0) result += "-";
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
+    local page = make("ScrollingFrame", { Name = name .. "_Page", Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = T.border,
+        CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false,
+        ScrollingDirection = Enum.ScrollingDirection.Y }, { pad(16, 20, 18, 18) })
+    page.Parent = win.content
+    make("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = page
+
+    tab.page = page; tab.btn = btn
+
+    local function activate()
+        for _, t in pairs(win.tabs) do
+            t.page.Visible = false; t.btn.BackgroundTransparency = 1
+            t.btn:FindFirstChildOfClass("TextLabel").TextColor3 = T.text2
+        end
+        page.Visible = true; btn.BackgroundTransparency = 0; btnLbl.TextColor3 = T.text
+        win.activeTab = tab
+    end
+    btn.MouseButton1Click:Connect(activate)
+    btn.MouseEnter:Connect(function() if win.activeTab ~= tab then tween(btn,0.18,{BackgroundTransparency=0.5}); btnLbl.TextColor3=T.text end end)
+    btn.MouseLeave:Connect(function() if win.activeTab ~= tab then tween(btn,0.18,{BackgroundTransparency=1}); btnLbl.TextColor3=T.text2 end end)
+
+    win.tabs[#win.tabs + 1] = tab
+    if #win.tabs == 1 then activate() end
+
+    function tab:CreateCard(cardName)
+        local card = make("Frame", { Name = cardName or "Card", Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = T.card, BorderSizePixel = 0 },
+            { corner(12), stroke(T.border, 1), pad(15, 15, 17, 17) })
+        card.Parent = page
+        make("UIListLayout", { Padding = UDim.new(0, 11), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = card
+
+        if cardName then
+            local head = make("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, LayoutOrder = 0 })
+            head.Parent = card
+            make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = string.upper(cardName),
+                Font = FONT_B, TextSize = 11, TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left }).Parent = head
+        end
+
+        local C = {}
+        local order = 1
+        local function sep()
+            local s = make("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = T.border,
+                BorderSizePixel = 0, LayoutOrder = order }); order = order + 1; s.Parent = card
+        end
+        local function rowBase(labelText, h)
+            if order > 1 then sep() end
+            local row = make("Frame", { Size = UDim2.new(1, 0, 0, h or 34), BackgroundTransparency = 1, LayoutOrder = order })
+            order = order + 1; row.Parent = card
+            make("TextLabel", { Name = "Lbl", Size = UDim2.new(1, -180, 0, 34), BackgroundTransparency = 1, Text = labelText,
+                Font = FONT_M, TextSize = 13, TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Left }).Parent = row
+            return row
+        end
+
+        -- TOGGLE (+ optional inline keybind ด้วย Bind=true)
+        function C:Toggle(o)
+            o = o or {}
+            local state = o.Default or false
+            local row = rowBase(o.Name or "Toggle")
+            local sw = make("Frame", { Size = UDim2.new(0, 38, 0, 22), Position = UDim2.new(1, -38, 0.5, -11),
+                BackgroundColor3 = state and T.accent or T.border, BorderSizePixel = 0 }, { corner(11) })
+            sw.Parent = row
+            local knob = make("Frame", { Size = UDim2.new(0, 18, 0, 18),
+                Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9),
+                BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0 }, { corner(9) })
+            knob.Parent = sw
+            local hit = make("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "" })
+            hit.Parent = sw
+            local function set(v, fire)
+                state = v
+                tween(sw, 0.22, { BackgroundColor3 = v and T.accent or T.border })
+                tween(knob, 0.22, { Position = v and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9) })
+                if fire ~= false and o.Callback then o.Callback(v) end
+            end
+            hit.MouseButton1Click:Connect(function() set(not state, true) end)
+
+            -- inline keybind (กล่อง key ข้างสวิตช์)
+            if o.Bind then
+                local bindKey = o.BindDefault or Enum.KeyCode.Unknown
+                local kbox = make("TextButton", { Size = UDim2.new(0, 84, 0, 24), Position = UDim2.new(1, -132, 0.5, -12),
+                    BackgroundColor3 = T.hover, BorderSizePixel = 0, AutoButtonColor = false, Text = keyName(bindKey),
+                    Font = Enum.Font.RobotoMono, TextSize = 11, TextColor3 = T.text2 }, { corner(7), stroke(T.border, 1) })
+                kbox.Parent = row
+                local listening = false
+                kbox.MouseButton1Click:Connect(function() listening = true; kbox.Text = "..."; kbox.TextColor3 = T.accent end)
+                UserInputService.InputBegan:Connect(function(inp, gpe)
+                    if listening and inp.UserInputType == Enum.UserInputType.Keyboard then
+                        listening = false
+                        if inp.KeyCode == Enum.KeyCode.Backspace then bindKey = Enum.KeyCode.Unknown
+                        else bindKey = inp.KeyCode end
+                        kbox.Text = keyName(bindKey); kbox.TextColor3 = T.text2
+                        if o.BindCallback then o.BindCallback(bindKey) end   -- ← ส่งกลับให้ main เซฟ
+                    elseif not listening and not gpe and inp.UserInputType == Enum.UserInputType.Keyboard
+                        and bindKey ~= Enum.KeyCode.Unknown and inp.KeyCode == bindKey then
+                        set(not state, true)
+                    end
+                end)
+            end
+
+            if o.Flag then win[o.Flag] = set end
+            return { Set = set, Get = function() return state end }
+        end
+
+        -- SLIDER
+        function C:Slider(o)
+            o = o or {}
+            local min, max = o.Min or 0, o.Max or 100
+            local val = o.Default or min
+            local vw = o.Format and 118 or 56        -- readout กว้างขึ้นถ้ามี Format
+            local function fmt(v) if o.Format then return o.Format(v) end return tostring(v)..(o.Suffix and (" "..o.Suffix) or "") end
+            local row = rowBase(o.Name or "Slider")
+            local track = make("Frame", { Size = UDim2.new(0, 140, 0, 5), Position = UDim2.new(1, -(vw + 150), 0.5, -2),
+                BackgroundColor3 = T.border, BorderSizePixel = 0 }, { corner(3) })
+            track.Parent = row
+            local fill = make("Frame", { Size = UDim2.new((val-min)/(max-min), 0, 1, 0),
+                BackgroundColor3 = T.accent, BorderSizePixel = 0 }, { corner(3) })
+            fill.Parent = track
+            local thumb = make("Frame", { Size = UDim2.new(0, 15, 0, 15), Position = UDim2.new((val-min)/(max-min), -7, 0.5, -7),
+                BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0, ZIndex = 3 }, { corner(8), stroke(T.accent, 2) })
+            thumb.Parent = track
+            local valLbl = make("TextLabel", { Size = UDim2.new(0, vw, 0, 34), Position = UDim2.new(1, -vw, 0.5, -17),
+                BackgroundTransparency = 1, Text = fmt(val),
+                Font = FONT_M, TextSize = 12, TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Right })
+            valLbl.Parent = row
+            local function setFromX(px)
+                local rel = math.clamp((px - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+                if o.Decimals then local m = 10^o.Decimals; val = math.floor((min+(max-min)*rel)*m+0.5)/m
+                else val = math.floor((min+(max-min)*rel)+0.5) end
+                fill.Size = UDim2.new(rel, 0, 1, 0); thumb.Position = UDim2.new(rel, -7, 0.5, -7)
+                valLbl.Text = fmt(val)
+                if o.Callback then o.Callback(val) end
+            end
+            local sliding = false
+            track.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then sliding=true; setFromX(inp.Position.X) end end)
+            UserInputService.InputChanged:Connect(function(inp) if sliding and inp.UserInputType == Enum.UserInputType.MouseMovement then setFromX(inp.Position.X) end end)
+            UserInputService.InputEnded:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then sliding=false end end)
+            return { Set = function(v) local rel=(v-min)/(max-min); setFromX(track.AbsolutePosition.X + track.AbsoluteSize.X*rel) end, Get = function() return val end }
+        end
+
+        -- INPUT (ช่องใส่ตัวเลข — apply ตอน enter/หลุด focus ไม่กระตุก)
+        function C:Input(o)
+            o = o or {}
+            local val = o.Default or 0
+            local row = rowBase(o.Name or "Input")
+            local box = make("TextBox", { Size = UDim2.new(0, 96, 0, 26), Position = UDim2.new(1, -96, 0.5, -13),
+                BackgroundColor3 = T.hover, BorderSizePixel = 0, Text = tostring(val), Font = Enum.Font.RobotoMono,
+                TextSize = 12, TextColor3 = T.text, ClearTextOnFocus = false,
+                TextXAlignment = Enum.TextXAlignment.Center }, { corner(7), stroke(T.border, 1) })
+            box.Parent = row
+            box.FocusLost:Connect(function()
+                local n = tonumber(box.Text)
+                if n then
+                    if o.Min then n = math.max(n, o.Min) end
+                    if o.Max then n = math.min(n, o.Max) end
+                    val = n
+                end
+                box.Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or "")
+                if o.Callback then o.Callback(val) end
+            end)
+            box.Focused:Connect(function() box.Text = tostring(val) end)
+            box.Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or "")
+            return { Set = function(v) val = v; box.Text = tostring(v)..(o.Suffix and (" "..o.Suffix) or "") end, Get = function() return val end }
+        end
+
+        -- DROPDOWN (multi-select + search)
+        function C:Dropdown(o)
+            o = o or {}
+            local options = o.Options or {}
+            local multi = (o.Multi ~= false)
+            local selected = {}   -- set: name -> true
+            if o.Default then for _, n in ipairs(o.Default) do selected[n] = true end end
+            if order > 1 then sep() end
+            local wrap = make("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1, LayoutOrder = order })
+            order = order + 1; wrap.Parent = card
+            make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = wrap
+
+            local headBtn = make("TextButton", { Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = T.hover,
+                BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = 0 }, { corner(9), stroke(T.border, 1), pad(0,0,12,12) })
+            headBtn.Parent = wrap
+            local headLbl = make("TextLabel", { Size = UDim2.new(1, -20, 1, 0), BackgroundTransparency = 1,
+                Text = (o.Name or "Select").." (0)", Font = FONT_M, TextSize = 13, TextColor3 = T.text,
+                TextXAlignment = Enum.TextXAlignment.Left })
+            headLbl.Parent = headBtn
+            make("TextLabel", { Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0), BackgroundTransparency = 1,
+                Text = "▾", Font = FONT, TextSize = 13, TextColor3 = T.text2 }).Parent = headBtn
+
+            local panel = make("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundColor3 = T.bg, BorderSizePixel = 0, Visible = false, LayoutOrder = 1 },
+                { corner(9), stroke(T.border, 1), pad(8,8,8,8) })
+            panel.Parent = wrap
+            make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = panel
+
+            local showSearch = (o.Search ~= false)
+            local searchBox
+            if showSearch then
+                searchBox = make("TextBox", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.hover,
+                    BorderSizePixel = 0, PlaceholderText = "Search...", Text = "", Font = FONT, TextSize = 12,
+                    TextColor3 = T.text, PlaceholderColor3 = T.text2, ClearTextOnFocus = false, LayoutOrder = 0 },
+                    { corner(7), pad(0,0,10,10) })
+                searchBox.Parent = panel
+            end
+
+            local listH = math.max(math.min(#options * 32, 180), 32)
+            local listFrame = make("ScrollingFrame", { Size = UDim2.new(1, 0, 0, listH), BackgroundTransparency = 1,
+                BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = T.border, LayoutOrder = 1,
+                CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
+            listFrame.Parent = panel
+            make("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = listFrame
+
+            local rowByName = {}
+            local function refreshHead()
+                if multi then
+                    local n = 0; for _ in pairs(selected) do n = n + 1 end
+                    headLbl.Text = (o.Name or "Select").." ("..n..")"
+                else
+                    local picked = nil; for name in pairs(selected) do picked = name; break end
+                    headLbl.Text = (o.Name or "Select")..": "..(picked or "—")
+                end
+            end
+            local function updateDots()
+                for _, ch in pairs(listFrame:GetChildren()) do
+                    if ch:IsA("TextButton") then
+                        local lbl = ch:FindFirstChild("L")
+                        local dot = ch:FindFirstChild("D")
+                        if lbl and dot then
+                            local name = lbl.Text
+                            if selected[name] then dot.BackgroundColor3 = T.accent; lbl.TextColor3 = T.text
+                            else dot.BackgroundColor3 = T.border; lbl.TextColor3 = T.text2 end
+                        end
+                    end
+                end
+            end
+            local function fireCB()
+                local list = {}; for name in pairs(selected) do list[#list+1] = name end
+                if o.Callback then o.Callback(selected, list) end
+            end
+            local function makeOptRow(name)
+                local orow = make("TextButton", { Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = T.hover,
+                    BorderSizePixel = 0, AutoButtonColor = false, Text = "" }, { corner(6), pad(0,0,9,9) })
+                make("TextLabel", { Name="L", Size = UDim2.new(1, -24, 1, 0), BackgroundTransparency = 1, Text = name,
+                    Font = FONT, TextSize = 12, TextColor3 = selected[name] and T.text or T.text2, TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd }).Parent = orow
+                local dot = make("Frame", { Name="D", Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(1, -14, 0.5, -6),
+                    BackgroundColor3 = selected[name] and T.accent or T.border, BorderSizePixel = 0 }, { corner(3) })
+                dot.Parent = orow
+                orow.MouseButton1Click:Connect(function()
+                    if multi then
+                        if selected[name] then selected[name] = nil; dot.BackgroundColor3 = T.border; orow:FindFirstChild("L").TextColor3 = T.text2
+                        else selected[name] = true; dot.BackgroundColor3 = T.accent; orow:FindFirstChild("L").TextColor3 = T.text end
+                    else
+                        if selected[name] then return end
+                        selected = {}; selected[name] = true
+                        updateDots()
+                        panel.Visible = false
+                    end
+                    refreshHead(); fireCB()
+                end)
+                return orow
+            end
+            local function rebuild(filter)
+                for _, ch in pairs(listFrame:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
+                filter = (filter or ""):lower()
+                local shown = 0
+                for _, name in ipairs(options) do
+                    if filter == "" or name:lower():find(filter, 1, true) then
+                        local r = makeOptRow(name); r.Parent = listFrame; shown = shown + 1
+                        if shown >= 100 then break end
+                    end
+                end
+            end
+            if searchBox then
+                searchBox:GetPropertyChangedSignal("Text"):Connect(function() rebuild(searchBox.Text) end)
+            end
+            headBtn.MouseButton1Click:Connect(function()
+                panel.Visible = not panel.Visible
+                if panel.Visible and #listFrame:GetChildren() <= 1 then rebuild("") end
+            end)
+
+            refreshHead()
+            local function getFilter() return searchBox and searchBox.Text or "" end
+            local function recalcHeight()
+                local h = math.max(math.min(#options * 32, 180), 32)
+                listFrame.Size = UDim2.new(1, 0, 0, h)
+            end
+            local api = {}
+            function api:SetOptions(list) options = list or {}; recalcHeight(); rebuild(getFilter()) end
+            function api:GetSelected() return selected end
+            function api:Clear() selected = {}; refreshHead(); rebuild(getFilter()); fireCB() end
+            return api
+        end
+
+        -- BUTTON
+        function C:Button(o)
+            o = o or {}
+            if order > 1 then sep() end
+            local hasBind = o.Bind
+            local row = make("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = order })
+            order = order + 1; row.Parent = card
+            local b = make("TextButton", { Size = hasBind and UDim2.new(1, -92, 1, 0) or UDim2.new(1, 0, 1, 0),
+                BackgroundColor3 = o.Danger and Color3.fromRGB(60,26,30) or T.hover, BorderSizePixel = 0,
+                AutoButtonColor = false, Text = o.Name or "Button", Font = FONT_M, TextSize = 13,
+                TextColor3 = o.Danger and Color3.fromRGB(240,120,120) or T.text },
+                { corner(8), stroke(o.Danger and Color3.fromRGB(90,40,45) or T.border, 1) })
+            b.Parent = row
+            b.MouseButton1Click:Connect(function() if o.Callback then o.Callback() end end)
+            local baseC = b.BackgroundColor3
+            b.MouseEnter:Connect(function() tween(b, 0.15, { BackgroundColor3 = T.border }) end)
+            b.MouseLeave:Connect(function() tween(b, 0.15, { BackgroundColor3 = baseC }) end)
+
+            if hasBind then
+                local bindKey = o.BindDefault or Enum.KeyCode.Unknown
+                local kbox = make("TextButton", { Size = UDim2.new(0, 84, 1, 0), Position = UDim2.new(1, -84, 0, 0),
+                    BackgroundColor3 = T.hover, BorderSizePixel = 0, AutoButtonColor = false, Text = keyName(bindKey),
+                    Font = Enum.Font.RobotoMono, TextSize = 11, TextColor3 = T.text2 }, { corner(7), stroke(T.border, 1) })
+                kbox.Parent = row
+                local listening = false
+                kbox.MouseButton1Click:Connect(function() listening = true; kbox.Text = "..."; kbox.TextColor3 = T.accent end)
+                UserInputService.InputBegan:Connect(function(inp, gpe)
+                    if listening and inp.UserInputType == Enum.UserInputType.Keyboard then
+                        listening = false
+                        if inp.KeyCode == Enum.KeyCode.Backspace then bindKey = Enum.KeyCode.Unknown
+                        else bindKey = inp.KeyCode end
+                        kbox.Text = keyName(bindKey); kbox.TextColor3 = T.text2
+                        if o.BindCallback then o.BindCallback(bindKey) end
+                    elseif not listening and not gpe and inp.UserInputType == Enum.UserInputType.Keyboard
+                        and bindKey ~= Enum.KeyCode.Unknown and inp.KeyCode == bindKey then
+                        if o.Callback then o.Callback() end
+                    end
+                end)
+            end
+            return b
+        end
+
+        return C
+    end
+
+    return tab
+end
+
+return Library
