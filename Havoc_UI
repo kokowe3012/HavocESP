@@ -407,6 +407,7 @@ function Library:CreateTab(name)
         function C:Dropdown(o)
             o = o or {}
             local options = o.Options or {}
+            local multi = (o.Multi ~= false)
             local selected = {}   -- set: name -> true
             if o.Default then for _, n in ipairs(o.Default) do selected[n] = true end end
             if order > 1 then sep() end
@@ -431,13 +432,18 @@ function Library:CreateTab(name)
             panel.Parent = wrap
             make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = panel
 
-            local searchBox = make("TextBox", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.hover,
-                BorderSizePixel = 0, PlaceholderText = "Search...", Text = "", Font = FONT, TextSize = 12,
-                TextColor3 = T.text, PlaceholderColor3 = T.text2, ClearTextOnFocus = false, LayoutOrder = 0 },
-                { corner(7), pad(0,0,10,10) })
-            searchBox.Parent = panel
+            local showSearch = (o.Search ~= false)
+            local searchBox
+            if showSearch then
+                searchBox = make("TextBox", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.hover,
+                    BorderSizePixel = 0, PlaceholderText = "Search...", Text = "", Font = FONT, TextSize = 12,
+                    TextColor3 = T.text, PlaceholderColor3 = T.text2, ClearTextOnFocus = false, LayoutOrder = 0 },
+                    { corner(7), pad(0,0,10,10) })
+                searchBox.Parent = panel
+            end
 
-            local listFrame = make("ScrollingFrame", { Size = UDim2.new(1, 0, 0, 180), BackgroundTransparency = 1,
+            local listH = math.max(math.min(#options * 32, 180), 32)
+            local listFrame = make("ScrollingFrame", { Size = UDim2.new(1, 0, 0, listH), BackgroundTransparency = 1,
                 BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = T.border, LayoutOrder = 1,
                 CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
             listFrame.Parent = panel
@@ -445,8 +451,26 @@ function Library:CreateTab(name)
 
             local rowByName = {}
             local function refreshHead()
-                local n = 0; for _ in pairs(selected) do n = n + 1 end
-                headLbl.Text = (o.Name or "Select").." ("..n..")"
+                if multi then
+                    local n = 0; for _ in pairs(selected) do n = n + 1 end
+                    headLbl.Text = (o.Name or "Select").." ("..n..")"
+                else
+                    local picked = nil; for name in pairs(selected) do picked = name; break end
+                    headLbl.Text = (o.Name or "Select")..": "..(picked or "—")
+                end
+            end
+            local function updateDots()
+                for _, ch in pairs(listFrame:GetChildren()) do
+                    if ch:IsA("TextButton") then
+                        local lbl = ch:FindFirstChild("L")
+                        local dot = ch:FindFirstChild("D")
+                        if lbl and dot then
+                            local name = lbl.Text
+                            if selected[name] then dot.BackgroundColor3 = T.accent; lbl.TextColor3 = T.text
+                            else dot.BackgroundColor3 = T.border; lbl.TextColor3 = T.text2 end
+                        end
+                    end
+                end
             end
             local function fireCB()
                 local list = {}; for name in pairs(selected) do list[#list+1] = name end
@@ -456,14 +480,21 @@ function Library:CreateTab(name)
                 local orow = make("TextButton", { Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = T.hover,
                     BorderSizePixel = 0, AutoButtonColor = false, Text = "" }, { corner(6), pad(0,0,9,9) })
                 make("TextLabel", { Name="L", Size = UDim2.new(1, -24, 1, 0), BackgroundTransparency = 1, Text = name,
-                    Font = FONT, TextSize = 12, TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left,
+                    Font = FONT, TextSize = 12, TextColor3 = selected[name] and T.text or T.text2, TextXAlignment = Enum.TextXAlignment.Left,
                     TextTruncate = Enum.TextTruncate.AtEnd }).Parent = orow
                 local dot = make("Frame", { Name="D", Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(1, -14, 0.5, -6),
                     BackgroundColor3 = selected[name] and T.accent or T.border, BorderSizePixel = 0 }, { corner(3) })
                 dot.Parent = orow
                 orow.MouseButton1Click:Connect(function()
-                    if selected[name] then selected[name] = nil; dot.BackgroundColor3 = T.border; orow:FindFirstChild("L").TextColor3 = T.text2
-                    else selected[name] = true; dot.BackgroundColor3 = T.accent; orow:FindFirstChild("L").TextColor3 = T.text end
+                    if multi then
+                        if selected[name] then selected[name] = nil; dot.BackgroundColor3 = T.border; orow:FindFirstChild("L").TextColor3 = T.text2
+                        else selected[name] = true; dot.BackgroundColor3 = T.accent; orow:FindFirstChild("L").TextColor3 = T.text end
+                    else
+                        if selected[name] then return end
+                        selected = {}; selected[name] = true
+                        updateDots()
+                        panel.Visible = false
+                    end
                     refreshHead(); fireCB()
                 end)
                 return orow
@@ -475,21 +506,28 @@ function Library:CreateTab(name)
                 for _, name in ipairs(options) do
                     if filter == "" or name:lower():find(filter, 1, true) then
                         local r = makeOptRow(name); r.Parent = listFrame; shown = shown + 1
-                        if shown >= 100 then break end   -- แสดงทีละ 100 กันแลค
+                        if shown >= 100 then break end
                     end
                 end
             end
-            searchBox:GetPropertyChangedSignal("Text"):Connect(function() rebuild(searchBox.Text) end)
+            if searchBox then
+                searchBox:GetPropertyChangedSignal("Text"):Connect(function() rebuild(searchBox.Text) end)
+            end
             headBtn.MouseButton1Click:Connect(function()
                 panel.Visible = not panel.Visible
                 if panel.Visible and #listFrame:GetChildren() <= 1 then rebuild("") end
             end)
 
-            refreshHead()   -- แสดงจำนวนที่เลือกไว้ (จาก Default) ตั้งแต่เปิด
+            refreshHead()
+            local function getFilter() return searchBox and searchBox.Text or "" end
+            local function recalcHeight()
+                local h = math.max(math.min(#options * 32, 180), 32)
+                listFrame.Size = UDim2.new(1, 0, 0, h)
+            end
             local api = {}
-            function api:SetOptions(list) options = list or {}; rebuild(searchBox.Text) end
+            function api:SetOptions(list) options = list or {}; recalcHeight(); rebuild(getFilter()) end
             function api:GetSelected() return selected end
-            function api:Clear() selected = {}; refreshHead(); rebuild(searchBox.Text); fireCB() end
+            function api:Clear() selected = {}; refreshHead(); rebuild(getFilter()); fireCB() end
             return api
         end
 
