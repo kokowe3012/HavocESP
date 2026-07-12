@@ -92,9 +92,10 @@ function Library:CreateWindow(cfg)
     logo.Parent = header
     make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "H",
         Font = FONT_B, TextSize = 20, TextColor3 = T.accent, ZIndex = 3 }).Parent = logo
-    make("TextLabel", { Position = UDim2.new(0, 50, 0, 12), Size = UDim2.new(0, 200, 0, 20),
+    local titleLabel = make("TextLabel", { Position = UDim2.new(0, 50, 0, 12), Size = UDim2.new(0, 200, 0, 20),
         BackgroundTransparency = 1, Text = cfg.Title or "HAVOC", Font = FONT_B, TextSize = 17,
-        TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 }).Parent = header
+        TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 })
+    titleLabel.Parent = header
     make("TextLabel", { Position = UDim2.new(0, 50, 0, 32), Size = UDim2.new(0, 260, 0, 16),
         BackgroundTransparency = 1, Text = cfg.Sub or "External Framework", Font = FONT, TextSize = 12,
         TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3 }).Parent = header
@@ -216,6 +217,10 @@ function Library:CreateWindow(cfg)
                 pcall(function() toast:Destroy() end)
             end
         end)
+    end
+
+    function self:SetTitle(text)
+        pcall(function() titleLabel.Text = text end)
     end
 
     function self:Destroy()
