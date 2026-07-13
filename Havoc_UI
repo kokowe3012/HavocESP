@@ -1,3 +1,14 @@
+--[[  HAVOC UI Library v2.1  — host บน GitHub เรียกแบบ Rayfield
+    local Lib = loadstring(game:HttpGet(URL))()
+    local Win = Lib:CreateWindow({ Title="HAVOC", Sub="External Framework", Version="2.0" })
+    local tab = Win:CreateTab("ESP")
+    local card = tab:CreateCard("ESP Settings")
+    card:Toggle({ Name="Enable ESP", Default=false, Bind=true, Callback=function(v) end })
+    card:Slider({ Name="FOV", Min=80, Max=200, Default=90, Suffix="", Callback=function(v) end })
+    card:Dropdown({ Name="Items", Options={...}, Multi=true, Search=true, Callback=function(sel) end })
+    card:Button({ Name="Do it", Callback=function() end })
+--]]
+
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
