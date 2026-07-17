@@ -1,3 +1,14 @@
+--[[  HAVOC UI Library v2.1  — host บน GitHub เรียกแบบ Rayfield
+    local Lib = loadstring(game:HttpGet(URL))()
+    local Win = Lib:CreateWindow({ Title="HAVOC", Sub="External Framework", Version="2.0" })
+    local tab = Win:CreateTab("ESP")
+    local card = tab:CreateCard("ESP Settings")
+    card:Toggle({ Name="Enable ESP", Default=false, Bind=true, Callback=function(v) end })
+    card:Slider({ Name="FOV", Min=80, Max=200, Default=90, Suffix="", Callback=function(v) end })
+    card:Dropdown({ Name="Items", Options={...}, Multi=true, Search=true, Callback=function(sel) end })
+    card:Button({ Name="Do it", Callback=function() end })
+--]]
+
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
@@ -395,6 +406,24 @@ function Library:CreateTab(name)
             box.Focused:Connect(function() box.Text = tostring(val) end)
             box.Text = tostring(val)..(o.Suffix and (" "..o.Suffix) or "")
             return { Set = function(v) val = v; box.Text = tostring(v)..(o.Suffix and (" "..o.Suffix) or "") end, Get = function() return val end }
+        end
+
+        -- TEXTINPUT (ช่องใส่ข้อความ — เก็บเป็น string ไม่แปลงเป็นตัวเลข)
+        function C:TextInput(o)
+            o = o or {}
+            local val = tostring(o.Default or "")
+            local row = rowBase(o.Name or "Text")
+            local box = make("TextBox", { Size = UDim2.new(0, 150, 0, 26), Position = UDim2.new(1, -150, 0.5, -13),
+                BackgroundColor3 = T.hover, BorderSizePixel = 0, Text = val, PlaceholderText = o.Placeholder or "",
+                Font = FONT, TextSize = 12, TextColor3 = T.text, PlaceholderColor3 = T.text2, ClearTextOnFocus = false,
+                TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd },
+                { corner(7), stroke(T.border, 1), pad(0, 0, 9, 9) })
+            box.Parent = row
+            box.FocusLost:Connect(function()
+                val = box.Text
+                if o.Callback then o.Callback(val) end
+            end)
+            return { Set = function(v) val = tostring(v); box.Text = val end, Get = function() return val end }
         end
 
         -- DROPDOWN (multi-select + search)
