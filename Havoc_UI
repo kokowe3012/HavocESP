@@ -1,3 +1,4 @@
+
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
@@ -234,16 +235,24 @@ function Library:CreateWindow(cfg)
         if inp.KeyCode == self.toggleKey then main.Visible = not main.Visible end
     end)
 
-    -- ตอน UI เปิด: บังคับปลดล็อกเมาส์ + โชว์ cursor (override เกมทุกเฟรม)
-    -- พอปิด UI เกมคุมเมาส์กลับเอง (ไม่ต้องกด ESC)
+    -- ── คุมเมาส์ ──────────────────────────────────────────────────────
+    -- ตอน UI เปิด: ปลดล็อกเมาส์เฉพาะ LockCenter (first person / shift lock) เพื่อให้คลิก UI ได้
+    --   ⚠ ห้ามเขียนทับ LockCurrentPosition — เป็นสถานะที่สคริปต์กล้องของเกมตั้งไว้ตอน
+    --     "คลิกขวาค้างหมุนกล้อง" ถ้าดันกลับเป็น Default ทุกเฟรม กล้องจะหมุนไม่ได้เลย
+    -- cfg.LockMouse = true → ตอนซ่อน UI บังคับล็อกกลางจอคืน (เกมแนวยิงอย่าง HAVOC)
+    --   default: ไม่แตะ ปล่อยให้เกมคุมเอง (เกมที่ต้องใช้เมาส์คลิกอย่าง Evomon จะพังถ้าล็อก)
+    local lockOnHide = cfg.LockMouse == true
     self._mouseConn = RunService.RenderStepped:Connect(function()
         if main.Visible then
-            if not UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = true end
-            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+            if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
             end
-        else
-            -- UI ซ่อน → ซ่อนเมาส์ + ล็อกกลางจอ (คืนให้เกมเล่นปกติ)
+            -- โชว์ cursor เฉพาะตอนไม่ได้กำลังหมุนกล้อง (LockCurrentPosition = เกมซ่อน cursor เอง)
+            if UserInputService.MouseBehavior == Enum.MouseBehavior.Default
+                and not UserInputService.MouseIconEnabled then
+                UserInputService.MouseIconEnabled = true
+            end
+        elseif lockOnHide then
             if UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = false end
             if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
