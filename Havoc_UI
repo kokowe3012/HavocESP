@@ -1,4 +1,3 @@
-
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
@@ -65,7 +64,8 @@ function Library:CreateWindow(cfg)
     self.gui = sg
 
     local main = make("Frame", { Name = "Main", Size = UDim2.new(0, 560, 0, 560),
-        Position = UDim2.new(0.5, -280, 0.5, -280), BackgroundColor3 = T.bg, BorderSizePixel = 0 },
+        Position = UDim2.new(0.5, -280, 0.5, -280), BackgroundColor3 = T.bg, BorderSizePixel = 0,
+        ClipsDescendants = true },  -- กันของข้างในล้นออกนอกกรอบตอนพับ
         { corner(15), stroke(T.border, 1) })
     main.Parent = sg
     self.main = main
@@ -74,10 +74,13 @@ function Library:CreateWindow(cfg)
     local header = make("Frame", { Name = "Header", Size = UDim2.new(1, 0, 0, 58),
         BackgroundColor3 = T.bg, BorderSizePixel = 0 }, { pad(0, 0, 20, 20), corner(15) })
     header.Parent = main
-    make("Frame", { Size = UDim2.new(1, 0, 0.5, 0), Position = UDim2.new(0, 0, 0.5, 0),
-        BackgroundColor3 = T.bg, BorderSizePixel = 0 }).Parent = header  -- กันมุมโค้งเว้าบน header
-    make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
-        BackgroundColor3 = T.border, BorderSizePixel = 0, ZIndex = 2 }).Parent = header
+    -- กันมุมโค้งเว้าบน header (ตอนพับต้องซ่อน ไม่งั้นมุมล่างเป็นเหลี่ยม)
+    local headerFill = make("Frame", { Size = UDim2.new(1, 0, 0.5, 0), Position = UDim2.new(0, 0, 0.5, 0),
+        BackgroundColor3 = T.bg, BorderSizePixel = 0 })
+    headerFill.Parent = header
+    local headerLine = make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1),
+        BackgroundColor3 = T.border, BorderSizePixel = 0, ZIndex = 2 })
+    headerLine.Parent = header
 
     local logo = make("Frame", { Size = UDim2.new(0, 38, 0, 38), Position = UDim2.new(0, 0, 0.5, -19),
         BackgroundColor3 = Color3.fromRGB(45, 35, 20), BorderSizePixel = 0, ZIndex = 3 }, { corner(10) })
@@ -97,37 +100,24 @@ function Library:CreateWindow(cfg)
     make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
         Text = "Version " .. (cfg.Version or "2.0"), Font = FONT_M, TextSize = 11, TextColor3 = T.accent, ZIndex = 3 }).Parent = verBadge
 
-    local grip, tabBarLine  -- forward declare
-
-    -- collapse button (พับหน้าต่าง)
-    local collapseBtn = make("TextButton", { Size = UDim2.new(0, 24, 0, 24),
-        Position = UDim2.new(1, -120, 0.5, -12), BackgroundColor3 = T.bg, BorderSizePixel = 0,
-        Text = "—", Font = FONT_B, TextSize = 16, TextColor3 = T.text2,
-        AutoButtonColor = false, ZIndex = 3 }, { corner(6), stroke(T.border, 1) })
+    -- ปุ่มพับ (สร้างที่นี่ แต่ผูก logic ทีหลัง — ตอนที่ tabBar/content/grip มีครบแล้ว)
+    local collapseBtn = make("TextButton", { Size = UDim2.new(0, 26, 0, 26),
+        Position = UDim2.new(1, -124, 0.5, -13), BackgroundColor3 = T.bg, BorderSizePixel = 0,
+        Text = "", AutoButtonColor = false, ZIndex = 3 }, { corner(13), stroke(T.border, 1) })
     collapseBtn.Parent = header
-    self._collapsed = false
-    self._expandedSize = main.Size
-    collapseBtn.MouseButton1Click:Connect(function()
-        self._collapsed = not self._collapsed
-        if self._collapsed then
-            self._expandedSize = main.Size
-            tween(main, 0.25, { Size = UDim2.new(main.Size.X.Scale, main.Size.X.Offset, 0, 58) })
-            tabBar.Visible = false
-            tabBarLine.Visible = false
-            content.Visible = false
-            grip.Visible = false
-            collapseBtn.Text = "+"
-        else
-            tabBar.Visible = true
-            tabBarLine.Visible = true
-            content.Visible = true
-            grip.Visible = true
-            tween(main, 0.25, { Size = self._expandedSize })
-            collapseBtn.Text = "—"
-        end
-    end)
-    collapseBtn.MouseEnter:Connect(function() tween(collapseBtn, 0.15, { BackgroundColor3 = T.hover }) end)
-    collapseBtn.MouseLeave:Connect(function() tween(collapseBtn, 0.15, { BackgroundColor3 = T.bg }) end)
+    -- ลูกศรวาดจาก 2 แท่ง (ไม่พึ่ง glyph — บาง executor/ฟอนต์ไม่มีตัว chevron)
+    local chev = make("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 4 })
+    chev.Parent = collapseBtn
+    -- Rotation 0 = ลูกศรชี้ขึ้น (กางอยู่ → กดเพื่อพับ), หมุน 180 = ชี้ลง (พับอยู่ → กดเพื่อกาง)
+    local chevBars = {
+        make("Frame", { Size = UDim2.new(0, 9, 0, 2), AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, -3, 0.5, 0), BackgroundColor3 = T.text2, BorderSizePixel = 0,
+            Rotation = -45, ZIndex = 4 }, { corner(1) }),
+        make("Frame", { Size = UDim2.new(0, 9, 0, 2), AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 3, 0.5, 0), BackgroundColor3 = T.text2, BorderSizePixel = 0,
+            Rotation = 45, ZIndex = 4 }, { corner(1) }),
+    }
+    for _, b in ipairs(chevBars) do b.Parent = chev end
 
     -- tab bar (scroll แนวนอน กันแท็บล้น)
     local tabBar = make("Frame", { Name = "TabBar", Size = UDim2.new(1, 0, 0, 46),
@@ -138,7 +128,7 @@ function Library:CreateWindow(cfg)
         SortOrder = Enum.SortOrder.LayoutOrder }).Parent = tabBar
     self.tabBar = tabBar
     -- เส้นขอบล่าง tab bar (แยกออกจาก tabBar กัน UIListLayout จับไปเรียง)
-    tabBarLine = make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, 103),
+    local tabBarLine = make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, 103),
         BackgroundColor3 = T.border, BorderSizePixel = 0 })
     tabBarLine.Parent = main
 
@@ -165,7 +155,7 @@ function Library:CreateWindow(cfg)
     end)
 
     -- resize handle (มุมขวาล่าง)
-    grip = make("TextButton", { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -18, 1, -18),
+    local grip = make("TextButton", { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -18, 1, -18),
         BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 5 })
     grip.Parent = main
     make("TextLabel", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "◢",
@@ -187,6 +177,55 @@ function Library:CreateWindow(cfg)
     UserInputService.InputEnded:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
     end)
+
+    -- ── พับ/กางหน้าต่าง ──────────────────────────────────────────────
+    -- ⚠ ผูก logic ตรงนี้ (ไม่ใช่ตอนสร้างปุ่ม) เพราะ closure ต้องเห็น tabBar/content/grip
+    --   ถ้าเขียนไว้ก่อนบรรทัดที่ประกาศตัวแปรพวกนี้ Lua จะไปจับ global = nil
+    self._collapsed    = false
+    self._expandedSize = main.Size
+    local animating    = false
+
+    local function setCollapsed(on)
+        if animating or self._collapsed == on then return end
+        animating = true
+        self._collapsed = on
+
+        if on then
+            self._expandedSize = main.Size
+            -- ซ่อนทันที แล้วค่อยย่อกรอบ (ClipsDescendants กันเงาตกค้างระหว่าง tween)
+            tabBar.Visible     = false
+            tabBarLine.Visible = false
+            content.Visible    = false
+            grip.Visible       = false
+            headerFill.Visible = false   -- คืนมุมมนล่างให้ header
+            headerLine.Visible = false
+            tween(main, 0.22, { Size = UDim2.new(main.Size.X.Scale, main.Size.X.Offset, 0, 58) })
+            tween(chev, 0.22, { Rotation = 180 })
+        else
+            headerFill.Visible = true
+            headerLine.Visible = true
+            tween(main, 0.22, { Size = self._expandedSize })
+            tween(chev, 0.22, { Rotation = 0 })
+            task.delay(0.22, function()
+                tabBar.Visible     = true
+                tabBarLine.Visible = true
+                content.Visible    = true
+                grip.Visible       = true
+            end)
+        end
+        task.delay(0.24, function() animating = false end)
+    end
+
+    collapseBtn.MouseButton1Click:Connect(function() setCollapsed(not self._collapsed) end)
+    collapseBtn.MouseEnter:Connect(function()
+        tween(collapseBtn, 0.15, { BackgroundColor3 = T.hover })
+        for _, b in ipairs(chevBars) do tween(b, 0.15, { BackgroundColor3 = T.accent }) end
+    end)
+    collapseBtn.MouseLeave:Connect(function()
+        tween(collapseBtn, 0.15, { BackgroundColor3 = T.bg })
+        for _, b in ipairs(chevBars) do tween(b, 0.15, { BackgroundColor3 = T.text2 }) end
+    end)
+    function self:SetCollapsed(on) setCollapsed(on and true or false) end
 
     -- toggle visibility
     self.toggleKey = cfg.ToggleKey or Enum.KeyCode.RightControl
