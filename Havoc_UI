@@ -1,34 +1,3 @@
---[[  HAVOC UI Library v2.2  — shared UI lib ของทุกเกม (ไม่ใช่ของ HAVOC ESP อย่างเดียว)
-    host บน GitHub เรียกแบบ Rayfield
-
-    local Lib = loadstring(game:HttpGet(URL))()
-    local Win = Lib:CreateWindow({ Title="HAVOC", Sub="External Framework", Version="2.0",
-                                   Logo="T", Name="HAVOC_UI_LIB" })
-    local tab = Win:CreateTab("ESP")
-    local card = tab:CreateCard("ESP Settings")
-    card:Toggle({ Name="Enable ESP", Default=false, Bind=true, Callback=function(v) end })
-    card:Slider({ Name="FOV", Min=80, Max=200, Default=90, Increment=5, Suffix="", Callback=function(v) end })
-    card:Dropdown({ Name="Items", Options={...}, Multi=true, Search=true, Callback=function(sel, list) end })
-    card:Label({ Title="Note", Text="ข้อความอธิบาย" })
-    card:Button({ Name="Do it", Callback=function() end })
-
-    CreateWindow cfg:
-      Title / Sub / Version — ข้อความบน header
-      Logo                  — ตัวอักษรในกล่องโลโก้มุมซ้ายบน (default "T")
-      Name                  — ชื่อ ScreenGui (default "HAVOC_UI_LIB")
-                              ⚠ ตั้งให้ไม่ซ้ำถ้าจะรันหลายสคริปต์พร้อมกัน ไม่งั้นตัวใหม่จะฆ่าตัวเก่า
-      ToggleKey             — ปุ่มเปิด/ปิด UI
-
-    Dropdown Callback รับ 2 args: (selected, list)
-      selected = set  { ["A"]=true }      list = array { "A" }
-    Dropdown api: SetOptions(list) / GetSelected() / Clear() / SetSelected(list, silent)
-      ⚠ SetSelected ต้องส่ง silent=true ถ้าเรียกจากใน Callback ตัวเอง ไม่งั้น recursion
-
-    ทุก component รับ Desc="..." = คำอธิบายบรรทัดเล็กใต้ชื่อ (optional)
-    Toggle handle คืน { Set, Get } เป็น field ธรรมดา → เรียก h.Set(v) ด้วย "จุด" ไม่ใช่ colon
-      Set(v)        = เปลี่ยนค่า + ยิง Callback
-      Set(v, false) = เปลี่ยนค่าเงียบๆ ไม่ยิง Callback (ใช้ reset toggle จากในตัวเอง)
---]]
 
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
