@@ -1,3 +1,35 @@
+--[[  HAVOC UI Library v2.2  — shared UI lib ของทุกเกม (ไม่ใช่ของ HAVOC ESP อย่างเดียว)
+    host บน GitHub เรียกแบบ Rayfield
+
+    local Lib = loadstring(game:HttpGet(URL))()
+    local Win = Lib:CreateWindow({ Title="HAVOC", Sub="External Framework", Version="2.0",
+                                   Logo="T", Name="HAVOC_UI_LIB" })
+    local tab = Win:CreateTab("ESP")
+    local card = tab:CreateCard("ESP Settings")
+    card:Toggle({ Name="Enable ESP", Default=false, Bind=true, Callback=function(v) end })
+    card:Slider({ Name="FOV", Min=80, Max=200, Default=90, Increment=5, Suffix="", Callback=function(v) end })
+    card:Dropdown({ Name="Items", Options={...}, Multi=true, Search=true, Callback=function(sel, list) end })
+    card:Label({ Title="Note", Text="ข้อความอธิบาย" })
+    card:Button({ Name="Do it", Callback=function() end })
+
+    CreateWindow cfg:
+      Title / Sub / Version — ข้อความบน header
+      Logo                  — ตัวอักษรในกล่องโลโก้มุมซ้ายบน (default "T")
+      Name                  — ชื่อ ScreenGui (default "HAVOC_UI_LIB")
+                              ⚠ ตั้งให้ไม่ซ้ำถ้าจะรันหลายสคริปต์พร้อมกัน ไม่งั้นตัวใหม่จะฆ่าตัวเก่า
+      ToggleKey             — ปุ่มเปิด/ปิด UI
+
+    Dropdown Callback รับ 2 args: (selected, list)
+      selected = set  { ["A"]=true }      list = array { "A" }
+    Dropdown api: SetOptions(list) / GetSelected() / Clear() / SetSelected(list, silent)
+      ⚠ SetSelected ต้องส่ง silent=true ถ้าเรียกจากใน Callback ตัวเอง ไม่งั้น recursion
+
+    ทุก component รับ Desc="..." = คำอธิบายบรรทัดเล็กใต้ชื่อ (optional)
+    Toggle handle คืน { Set, Get } เป็น field ธรรมดา → เรียก h.Set(v) ด้วย "จุด" ไม่ใช่ colon
+      Set(v)        = เปลี่ยนค่า + ยิง Callback
+      Set(v, false) = เปลี่ยนค่าเงียบๆ ไม่ยิง Callback (ใช้ reset toggle จากในตัวเอง)
+--]]
+
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
@@ -96,6 +128,38 @@ function Library:CreateWindow(cfg)
     make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
         Text = "Version " .. (cfg.Version or "2.0"), Font = FONT_M, TextSize = 11, TextColor3 = T.accent, ZIndex = 3 }).Parent = verBadge
 
+    local grip, tabBarLine  -- forward declare
+
+    -- collapse button (พับหน้าต่าง)
+    local collapseBtn = make("TextButton", { Size = UDim2.new(0, 24, 0, 24),
+        Position = UDim2.new(1, -120, 0.5, -12), BackgroundColor3 = T.bg, BorderSizePixel = 0,
+        Text = "—", Font = FONT_B, TextSize = 16, TextColor3 = T.text2,
+        AutoButtonColor = false, ZIndex = 3 }, { corner(6), stroke(T.border, 1) })
+    collapseBtn.Parent = header
+    self._collapsed = false
+    self._expandedSize = main.Size
+    collapseBtn.MouseButton1Click:Connect(function()
+        self._collapsed = not self._collapsed
+        if self._collapsed then
+            self._expandedSize = main.Size
+            tween(main, 0.25, { Size = UDim2.new(main.Size.X.Scale, main.Size.X.Offset, 0, 58) })
+            tabBar.Visible = false
+            tabBarLine.Visible = false
+            content.Visible = false
+            grip.Visible = false
+            collapseBtn.Text = "+"
+        else
+            tabBar.Visible = true
+            tabBarLine.Visible = true
+            content.Visible = true
+            grip.Visible = true
+            tween(main, 0.25, { Size = self._expandedSize })
+            collapseBtn.Text = "—"
+        end
+    end)
+    collapseBtn.MouseEnter:Connect(function() tween(collapseBtn, 0.15, { BackgroundColor3 = T.hover }) end)
+    collapseBtn.MouseLeave:Connect(function() tween(collapseBtn, 0.15, { BackgroundColor3 = T.bg }) end)
+
     -- tab bar (scroll แนวนอน กันแท็บล้น)
     local tabBar = make("Frame", { Name = "TabBar", Size = UDim2.new(1, 0, 0, 46),
         Position = UDim2.new(0, 0, 0, 58), BackgroundColor3 = T.bg, BorderSizePixel = 0 }, { pad(7, 0, 14, 14) })
@@ -105,8 +169,9 @@ function Library:CreateWindow(cfg)
         SortOrder = Enum.SortOrder.LayoutOrder }).Parent = tabBar
     self.tabBar = tabBar
     -- เส้นขอบล่าง tab bar (แยกออกจาก tabBar กัน UIListLayout จับไปเรียง)
-    make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, 103),
-        BackgroundColor3 = T.border, BorderSizePixel = 0 }).Parent = main
+    tabBarLine = make("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, 103),
+        BackgroundColor3 = T.border, BorderSizePixel = 0 })
+    tabBarLine.Parent = main
 
     local content = make("Frame", { Name = "Content", Size = UDim2.new(1, 0, 1, -104),
         Position = UDim2.new(0, 0, 0, 104), BackgroundTransparency = 1, ClipsDescendants = true })
@@ -131,7 +196,7 @@ function Library:CreateWindow(cfg)
     end)
 
     -- resize handle (มุมขวาล่าง)
-    local grip = make("TextButton", { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -18, 1, -18),
+    grip = make("TextButton", { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -18, 1, -18),
         BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 5 })
     grip.Parent = main
     make("TextLabel", { Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = "◢",
