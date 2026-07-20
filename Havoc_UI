@@ -1,14 +1,3 @@
---[[  HAVOC UI Library v2.1  — host บน GitHub เรียกแบบ Rayfield
-    local Lib = loadstring(game:HttpGet(URL))()
-    local Win = Lib:CreateWindow({ Title="HAVOC", Sub="External Framework", Version="2.0" })
-    local tab = Win:CreateTab("ESP")
-    local card = tab:CreateCard("ESP Settings")
-    card:Toggle({ Name="Enable ESP", Default=false, Bind=true, Callback=function(v) end })
-    card:Slider({ Name="FOV", Min=80, Max=200, Default=90, Suffix="", Callback=function(v) end })
-    card:Dropdown({ Name="Items", Options={...}, Multi=true, Search=true, Callback=function(sel) end })
-    card:Button({ Name="Do it", Callback=function() end })
---]]
-
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
@@ -64,10 +53,12 @@ function Library:CreateWindow(cfg)
     self.tabs = {}
     self.activeTab = nil
 
-    local existing = guiParent():FindFirstChild("HAVOC_UI_LIB")
+    -- ชื่อ ScreenGui ตั้งได้ต่อสคริปต์ — กันหลายเกมรันพร้อมกันแล้วฆ่า UI ของกันเอง
+    local guiName = cfg.Name or "HAVOC_UI_LIB"
+    local existing = guiParent():FindFirstChild(guiName)
     if existing then existing:Destroy() end
 
-    local sg = make("ScreenGui", { Name = "HAVOC_UI_LIB", ResetOnSpawn = false,
+    local sg = make("ScreenGui", { Name = guiName, ResetOnSpawn = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 9999 })
     pcall(function() sg.Parent = guiParent() end)
     self.gui = sg
@@ -90,7 +81,7 @@ function Library:CreateWindow(cfg)
     local logo = make("Frame", { Size = UDim2.new(0, 38, 0, 38), Position = UDim2.new(0, 0, 0.5, -19),
         BackgroundColor3 = Color3.fromRGB(45, 35, 20), BorderSizePixel = 0, ZIndex = 3 }, { corner(10) })
     logo.Parent = header
-    make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "H",
+    make("TextLabel", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = cfg.Logo or "T",
         Font = FONT_B, TextSize = 20, TextColor3 = T.accent, ZIndex = 3 }).Parent = logo
     local titleLabel = make("TextLabel", { Position = UDim2.new(0, 50, 0, 12), Size = UDim2.new(0, 200, 0, 20),
         BackgroundTransparency = 1, Text = cfg.Title or "HAVOC", Font = FONT_B, TextSize = 17,
@@ -289,20 +280,58 @@ function Library:CreateTab(name)
             local s = make("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = T.border,
                 BorderSizePixel = 0, LayoutOrder = order }); order = order + 1; s.Parent = card
         end
-        local function rowBase(labelText, h)
+        -- desc = คำอธิบายบรรทัดเล็กใต้ชื่อ (optional) — row จะสูงขึ้นเองถ้ามี
+        local function rowBase(labelText, h, desc)
             if order > 1 then sep() end
-            local row = make("Frame", { Size = UDim2.new(1, 0, 0, h or 34), BackgroundTransparency = 1, LayoutOrder = order })
+            local hasDesc = desc ~= nil and desc ~= ""
+            local row = make("Frame", { Size = UDim2.new(1, 0, 0, (h or 34) + (hasDesc and 16 or 0)),
+                BackgroundTransparency = 1, LayoutOrder = order })
             order = order + 1; row.Parent = card
             make("TextLabel", { Name = "Lbl", Size = UDim2.new(1, -180, 0, 34), BackgroundTransparency = 1, Text = labelText,
                 Font = FONT_M, TextSize = 13, TextColor3 = T.text, TextXAlignment = Enum.TextXAlignment.Left }).Parent = row
+            if hasDesc then
+                make("TextLabel", { Name = "Desc", Position = UDim2.new(0, 0, 0, 31), Size = UDim2.new(1, -180, 0, 14),
+                    BackgroundTransparency = 1, Text = desc, Font = FONT, TextSize = 11, TextColor3 = T.text2,
+                    TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }).Parent = row
+            end
             return row
+        end
+
+        -- LABEL / PARAGRAPH — ข้อความอธิบาย ไม่มี control
+        -- รับได้ทั้ง card:Label("ข้อความ") และ card:Label({ Title=.., Text=.. })
+        function C:Label(o)
+            if type(o) == "string" then o = { Text = o } end
+            o = o or {}
+            if order > 1 then sep() end
+            local box = make("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1, LayoutOrder = order })
+            order = order + 1; box.Parent = card
+            make("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = box
+
+            local titleLbl
+            if o.Title and o.Title ~= "" then
+                titleLbl = make("TextLabel", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundTransparency = 1, Text = o.Title, Font = FONT_M, TextSize = 13, TextColor3 = T.text,
+                    TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, LayoutOrder = 0 })
+                titleLbl.Parent = box
+            end
+            local body = make("TextLabel", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1, Text = o.Text or o.Content or "", Font = FONT, TextSize = 12,
+                TextColor3 = T.text2, TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true, LayoutOrder = 1 })
+            body.Parent = box
+            return {
+                Set      = function(v) body.Text = tostring(v) end,
+                SetTitle = function(v) if titleLbl then titleLbl.Text = tostring(v) end end,
+                Get      = function() return body.Text end,
+            }
         end
 
         -- TOGGLE (+ optional inline keybind ด้วย Bind=true)
         function C:Toggle(o)
             o = o or {}
             local state = o.Default or false
-            local row = rowBase(o.Name or "Toggle")
+            local row = rowBase(o.Name or "Toggle", nil, o.Desc)
             local sw = make("Frame", { Size = UDim2.new(0, 38, 0, 22), Position = UDim2.new(1, -38, 0.5, -11),
                 BackgroundColor3 = state and T.accent or T.border, BorderSizePixel = 0 }, { corner(11) })
             sw.Parent = row
@@ -354,7 +383,7 @@ function Library:CreateTab(name)
             local val = o.Default or min
             local vw = o.Format and 118 or 56        -- readout กว้างขึ้นถ้ามี Format
             local function fmt(v) if o.Format then return o.Format(v) end return tostring(v)..(o.Suffix and (" "..o.Suffix) or "") end
-            local row = rowBase(o.Name or "Slider")
+            local row = rowBase(o.Name or "Slider", nil, o.Desc)
             local track = make("Frame", { Size = UDim2.new(0, 140, 0, 5), Position = UDim2.new(1, -(vw + 150), 0.5, -2),
                 BackgroundColor3 = T.border, BorderSizePixel = 0 }, { corner(3) })
             track.Parent = row
@@ -370,8 +399,12 @@ function Library:CreateTab(name)
             valLbl.Parent = row
             local function setFromX(px)
                 local rel = math.clamp((px - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-                if o.Decimals then local m = 10^o.Decimals; val = math.floor((min+(max-min)*rel)*m+0.5)/m
-                else val = math.floor((min+(max-min)*rel)+0.5) end
+                local raw = min + (max - min) * rel
+                if o.Increment and o.Increment > 0 then
+                    val = math.clamp(min + math.floor((raw - min) / o.Increment + 0.5) * o.Increment, min, max)
+                elseif o.Decimals then local m = 10^o.Decimals; val = math.floor(raw*m+0.5)/m
+                else val = math.floor(raw+0.5) end
+                if max > min then rel = (val - min) / (max - min) end   -- snap หลอดให้ตรงค่าที่ปัดแล้ว
                 fill.Size = UDim2.new(rel, 0, 1, 0); thumb.Position = UDim2.new(rel, -7, 0.5, -7)
                 valLbl.Text = fmt(val)
                 if o.Callback then o.Callback(val) end
@@ -387,7 +420,7 @@ function Library:CreateTab(name)
         function C:Input(o)
             o = o or {}
             local val = o.Default or 0
-            local row = rowBase(o.Name or "Input")
+            local row = rowBase(o.Name or "Input", nil, o.Desc)
             local box = make("TextBox", { Size = UDim2.new(0, 96, 0, 26), Position = UDim2.new(1, -96, 0.5, -13),
                 BackgroundColor3 = T.hover, BorderSizePixel = 0, Text = tostring(val), Font = Enum.Font.RobotoMono,
                 TextSize = 12, TextColor3 = T.text, ClearTextOnFocus = false,
@@ -412,7 +445,7 @@ function Library:CreateTab(name)
         function C:TextInput(o)
             o = o or {}
             local val = tostring(o.Default or "")
-            local row = rowBase(o.Name or "Text")
+            local row = rowBase(o.Name or "Text", nil, o.Desc)
             local box = make("TextBox", { Size = UDim2.new(0, 150, 0, 26), Position = UDim2.new(1, -150, 0.5, -13),
                 BackgroundColor3 = T.hover, BorderSizePixel = 0, Text = val, PlaceholderText = o.Placeholder or "",
                 Font = FONT, TextSize = 12, TextColor3 = T.text, PlaceholderColor3 = T.text2, ClearTextOnFocus = false,
@@ -551,6 +584,21 @@ function Library:CreateTab(name)
             function api:SetOptions(list) options = list or {}; recalcHeight(); rebuild(getFilter()) end
             function api:GetSelected() return selected end
             function api:Clear() selected = {}; refreshHead(); rebuild(getFilter()); fireCB() end
+            -- ตั้ง selection จากโค้ด รับได้ทั้ง array {"A","B"} / set {A=true} / string เดี่ยว
+            -- silent=true = ไม่ยิง Callback (ต้องใช้เมื่อเรียกจากใน Callback ตัวเอง ไม่งั้น recursion)
+            function api:SetSelected(list, silent)
+                selected = {}
+                if type(list) == "table" then
+                    for k, v in pairs(list) do
+                        if type(v) == "string" then selected[v] = true          -- array form
+                        elseif type(k) == "string" and v then selected[k] = true end  -- set form
+                    end
+                elseif type(list) == "string" then
+                    selected[list] = true
+                end
+                refreshHead(); updateDots()
+                if not silent then fireCB() end
+            end
             return api
         end
 
@@ -559,9 +607,16 @@ function Library:CreateTab(name)
             o = o or {}
             if order > 1 then sep() end
             local hasBind = o.Bind
-            local row = make("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = order })
+            local hasDesc = o.Desc ~= nil and o.Desc ~= ""
+            local row = make("Frame", { Size = UDim2.new(1, 0, 0, 34 + (hasDesc and 16 or 0)),
+                BackgroundTransparency = 1, LayoutOrder = order })
             order = order + 1; row.Parent = card
-            local b = make("TextButton", { Size = hasBind and UDim2.new(1, -92, 1, 0) or UDim2.new(1, 0, 1, 0),
+            if hasDesc then
+                make("TextLabel", { Name = "Desc", Position = UDim2.new(0, 0, 0, 36), Size = UDim2.new(1, 0, 0, 14),
+                    BackgroundTransparency = 1, Text = o.Desc, Font = FONT, TextSize = 11, TextColor3 = T.text2,
+                    TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }).Parent = row
+            end
+            local b = make("TextButton", { Size = hasBind and UDim2.new(1, -92, 0, 34) or UDim2.new(1, 0, 0, 34),
                 BackgroundColor3 = o.Danger and Color3.fromRGB(60,26,30) or T.hover, BorderSizePixel = 0,
                 AutoButtonColor = false, Text = o.Name or "Button", Font = FONT_M, TextSize = 13,
                 TextColor3 = o.Danger and Color3.fromRGB(240,120,120) or T.text },
@@ -574,7 +629,7 @@ function Library:CreateTab(name)
 
             if hasBind then
                 local bindKey = o.BindDefault or Enum.KeyCode.Unknown
-                local kbox = make("TextButton", { Size = UDim2.new(0, 84, 1, 0), Position = UDim2.new(1, -84, 0, 0),
+                local kbox = make("TextButton", { Size = UDim2.new(0, 84, 0, 34), Position = UDim2.new(1, -84, 0, 0),
                     BackgroundColor3 = T.hover, BorderSizePixel = 0, AutoButtonColor = false, Text = keyName(bindKey),
                     Font = Enum.Font.RobotoMono, TextSize = 11, TextColor3 = T.text2 }, { corner(7), stroke(T.border, 1) })
                 kbox.Parent = row
