@@ -71,6 +71,47 @@ function Library:CreateWindow(cfg)
     main.Parent = sg
     self.main = main
 
+    -- ── auto scale ตามขนาดจอ (มือถือ UI 560px ล้นจอ) ──────────────────
+    -- UIScale ย่อทั้ง frame + ลูกทุกตัว (ตัวอักษรย่อตามด้วย) โดยไม่ต้องแก้ขนาดรายตัว
+    local uiScale = make("UIScale", { Scale = 1 })
+    uiScale.Parent = main
+
+    local BASE = 560   -- ขนาดหน้าต่างเริ่มต้น (ก่อน scale)
+    local function fitScale()
+        if cfg.Scale then return cfg.Scale end            -- บังคับค่าเองได้
+        local cam = workspace.CurrentCamera
+        local vp  = cam and cam.ViewportSize
+        if not vp or vp.X < 1 or vp.Y < 1 then return 1 end
+        -- คุม 2 แกน: สูงไม่เกิน 75% ของจอ, กว้างไม่เกิน 90%
+        -- จอใหญ่คำนวณได้ > 1 แล้วโดน clamp → เดสก์ท็อป/แท็บเล็ตคงขนาดเดิมเป๊ะ
+        return math.clamp(math.min(vp.X * 0.90 / BASE, vp.Y * 0.75 / BASE),
+                          cfg.MinScale or 0.45, 1)
+    end
+
+    local function applyScale()
+        local s = fitScale()
+        uiScale.Scale = s
+        -- AnchorPoint เป็น (0,0) → จัดกลางเองโดยหักครึ่ง "ขนาดหลัง scale"
+        main.Position = UDim2.new(0.5, -(main.Size.X.Offset * s) / 2,
+                                  0.5, -(main.Size.Y.Offset * s) / 2)
+    end
+    applyScale()
+    self._uiScale = uiScale
+
+    -- จอหมุน / เปลี่ยนขนาดหน้าต่าง → คำนวณใหม่
+    local function bindViewport()
+        local cam = workspace.CurrentCamera
+        if cam then
+            pcall(function() cam:GetPropertyChangedSignal("ViewportSize"):Connect(applyScale) end)
+        end
+    end
+    bindViewport()
+    pcall(function()
+        workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+            bindViewport(); applyScale()
+        end)
+    end)
+
     -- header
     local header = make("Frame", { Name = "Header", Size = UDim2.new(1, 0, 0, 58),
         BackgroundColor3 = T.bg, BorderSizePixel = 0 }, { pad(0, 0, 20, 20), corner(15) })
@@ -138,21 +179,25 @@ function Library:CreateWindow(cfg)
     content.Parent = main
     self.content = content
 
-    -- drag (จับที่ header)
+    -- drag (จับที่ header) — รับทั้งเมาส์และนิ้ว (มือถือส่ง UserInputType.Touch ไม่ใช่ MouseButton1)
+    -- Position เป็นพิกัดจอจริง ไม่ผ่าน UIScale → ไม่ต้องหาร scale เหมือน resize
     local dragging, dragStart, startPos
     header.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+            or inp.UserInputType == Enum.UserInputType.Touch then
             dragging = true; dragStart = inp.Position; startPos = main.Position
         end
     end)
     UserInputService.InputChanged:Connect(function(inp)
-        if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement
+            or inp.UserInputType == Enum.UserInputType.Touch) then
             local d = inp.Position - dragStart
             main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
     end)
     UserInputService.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+            or inp.UserInputType == Enum.UserInputType.Touch then dragging = false end
     end)
 
     -- resize handle (มุมขวาล่าง)
@@ -163,20 +208,28 @@ function Library:CreateWindow(cfg)
         Font = FONT, TextSize = 12, TextColor3 = T.border, ZIndex = 5 }).Parent = grip
     local resizing, rStart, rSize
     grip.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-            resizing = true; rStart = inp.Position; rSize = main.AbsoluteSize
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+            or inp.UserInputType == Enum.UserInputType.Touch then
+            resizing = true; rStart = inp.Position
+            -- ⚠ ต้องอ่านจาก Size (หน่วยก่อน scale) ไม่ใช่ AbsoluteSize (ผ่าน UIScale แล้ว)
+            --   ไม่งั้นพอ scale < 1 หน้าต่างจะหดวูบทันทีที่แตะ grip
+            rSize = Vector2.new(main.Size.X.Offset, main.Size.Y.Offset)
         end
     end)
     UserInputService.InputChanged:Connect(function(inp)
-        if resizing and inp.UserInputType == Enum.UserInputType.MouseMovement then
+        if resizing and (inp.UserInputType == Enum.UserInputType.MouseMovement
+            or inp.UserInputType == Enum.UserInputType.Touch) then
             local d = inp.Position - rStart
-            local w = math.clamp(rSize.X + d.X, 480, 680)
-            local h = math.clamp(rSize.Y + d.Y, 340, 700)
+            local s = uiScale.Scale
+            -- หาร scale: เลื่อนนิ้ว/เมาส์ 10px บนจอ = ขนาดจริงต้องเพิ่ม 10/s หน่วย
+            local w = math.clamp(rSize.X + d.X / s, 480, 680)
+            local h = math.clamp(rSize.Y + d.Y / s, 340, 700)
             main.Size = UDim2.new(0, w, 0, h)
         end
     end)
     UserInputService.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+            or inp.UserInputType == Enum.UserInputType.Touch then resizing = false end
     end)
 
     -- ── พับ/กางหน้าต่าง ──────────────────────────────────────────────
