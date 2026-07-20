@@ -285,7 +285,13 @@ function Library:CreateWindow(cfg)
     self.toggleKey = cfg.ToggleKey or Enum.KeyCode.RightControl
     UserInputService.InputBegan:Connect(function(inp, gpe)
         if gpe then return end
-        if inp.KeyCode == self.toggleKey then main.Visible = not main.Visible end
+        if inp.KeyCode ~= self.toggleKey then return end
+        -- พับอยู่ = เมาส์คืนเกมไปแล้ว กดปุ่มพับเองไม่ได้ → ปุ่ม toggle กางคืนให้ (ทางออกเดียว)
+        if main.Visible and self._collapsed then
+            setCollapsed(false)
+        else
+            main.Visible = not main.Visible
+        end
     end)
 
     -- ── คุมเมาส์ ──────────────────────────────────────────────────────
@@ -294,9 +300,11 @@ function Library:CreateWindow(cfg)
     --     "คลิกขวาค้างหมุนกล้อง" ถ้าดันกลับเป็น Default ทุกเฟรม กล้องจะหมุนไม่ได้เลย
     -- cfg.LockMouse = true → ตอนซ่อน UI บังคับล็อกกลางจอคืน (เกมแนวยิงอย่าง HAVOC)
     --   default: ไม่แตะ ปล่อยให้เกมคุมเอง (เกมที่ต้องใช้เมาส์คลิกอย่าง Evomon จะพังถ้าล็อก)
+    -- ⚠ พับ (collapsed) = ไม่ได้ใช้ UI แล้ว → ต้องคืนเมาส์ให้เกมเหมือนตอนซ่อน
+    --   ถ้าเช็คแค่ main.Visible เมาส์จะค้างโชว์ตอนพับ (เกมล็อกกลับไม่ได้ เพราะโดนดันทุกเฟรม)
     local lockOnHide = cfg.LockMouse == true
     self._mouseConn = RunService.RenderStepped:Connect(function()
-        if main.Visible then
+        if main.Visible and not self._collapsed then
             if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
             end
