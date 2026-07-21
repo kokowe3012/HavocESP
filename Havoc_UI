@@ -302,24 +302,75 @@ function Library:CreateWindow(cfg)
     --   default: ไม่แตะ ปล่อยให้เกมคุมเอง (เกมที่ต้องใช้เมาส์คลิกอย่าง Evomon จะพังถ้าล็อก)
     -- ⚠ พับ (collapsed) = ไม่ได้ใช้ UI แล้ว → ต้องคืนเมาส์ให้เกมเหมือนตอนซ่อน
     --   ถ้าเช็คแค่ main.Visible เมาส์จะค้างโชว์ตอนพับ (เกมล็อกกลับไม่ได้ เพราะโดนดันทุกเฟรม)
-    local lockOnHide = cfg.LockMouse == true
+    -- ⚠ ห้ามพึ่ง cfg.LockMouse ในการคืนเมาส์ — สคริปต์ที่ลูกค้าถืออยู่เป็นไฟล์ obfus ค้างเวอร์ชันเก่า
+    --   (lib ดึงสดจาก GitHub แต่ตัวสคริปต์ไม่อัปเดต) ถ้าคืนเฉพาะตอน LockMouse=true
+    --   เครื่องลูกค้าเก่าจะได้ lockOnHide=false → cursor ที่ lib เปิดไว้ค้างตลอด
+    -- หลัก: "lib เปลี่ยนอะไรไว้ คืนอันนั้น" → เกมที่ต้องใช้เมาส์ (Evomon) ไม่โดนแตะเลย
+    --   เพราะ cursor เปิดอยู่แล้ว lib ไม่เคยต้องบังคับ = ไม่มีอะไรให้คืน
+    -- ⚠⚠ ต้นเหตุจริงของ "เมาส์ค้างตอนพับ" (เจอ 2026-07-21):
+    --   บรรทัด ~100 `if existing then existing:Destroy() end` ลบแค่ ScreenGui เก่า
+    --   แต่ RenderStepped loop ของหน้าต่างเก่า "ไม่ถูก disconnect" (มีแต่ Win:Destroy ที่ทำ)
+    --   → loop ผียังวิ่ง, ตัวแปร main ชี้ Frame ที่ destroy แล้ว ซึ่ง Roblox ยังอ่าน property ได้
+    --     main.Visible = true ค้าง / _collapsed = false ค้าง → สั่ง MouseIconEnabled=true ทุกเฟรม
+    --   → หน้าต่างใหม่พับแล้วคืนเมาส์ถูก แต่ loop ผีเปิด cursor กลับเฟรมถัดมา = ค้างตลอด
+    --   รันสคริปต์ซ้ำ = ผีสะสมเพิ่มเรื่อยๆ
+    -- กัน 2 ชั้น: (1) global kill-switch ฆ่า loop เก่าข้าม execution (2) self-check sg ตายแล้วเลิกเอง
+    local lockOnHide   = cfg.LockMouse == true
+    local forcedIcon   = false   -- lib เป็นคนเปิด cursor เอง (เกมซ่อนไว้ตอน first person)
+    local forcedUnlock = false   -- lib เป็นคนปลด LockCenter เอง
+
+    local function restoreMouse()   -- คืนเฉพาะสิ่งที่ lib เปลี่ยนไว้
+        if forcedIcon then
+            pcall(function() UserInputService.MouseIconEnabled = false end)
+            forcedIcon = false
+        end
+        if forcedUnlock then
+            pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter end)
+            forcedUnlock = false
+        end
+    end
+
+    -- ชั้น 1: ฆ่า loop เมาส์ของ execution ก่อนหน้า (สคริปต์รันซ้ำโดยไม่ผ่าน Win:Destroy)
+    local _env = (getgenv and getgenv()) or _G
+    if _env.__HAVOC_UI_MOUSE_KILL then pcall(_env.__HAVOC_UI_MOUSE_KILL) end
+
     self._mouseConn = RunService.RenderStepped:Connect(function()
+        -- ชั้น 2: ScreenGui ตาย/หลุด parent = หน้าต่างนี้ไม่มีแล้ว → คืนเมาส์ + เลิกวิ่ง
+        if sg.Parent == nil then
+            restoreMouse()
+            if self._mouseConn then self._mouseConn:Disconnect() end
+            return
+        end
         if main.Visible and not self._collapsed then
             if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
                 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                forcedUnlock = true
             end
             -- โชว์ cursor เฉพาะตอนไม่ได้กำลังหมุนกล้อง (LockCurrentPosition = เกมซ่อน cursor เอง)
             if UserInputService.MouseBehavior == Enum.MouseBehavior.Default
                 and not UserInputService.MouseIconEnabled then
                 UserInputService.MouseIconEnabled = true
+                forcedIcon = true
             end
-        elseif lockOnHide then
-            if UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = false end
-            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
-                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        else
+            -- ซ่อน/พับ → คืนแบบ one-shot (เคลียร์ flag) แล้วเลิกยุ่ง
+            -- เกมจะเปิด cursor เองทีหลังก็ไม่ไปสู้ด้วย
+            restoreMouse()
+            if lockOnHide then
+                if UserInputService.MouseIconEnabled then UserInputService.MouseIconEnabled = false end
+                if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+                    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                end
             end
         end
     end)
+
+    -- kill-switch ให้ execution ถัดไปมาสั่งฆ่า loop นี้ได้ (+ คืนเมาส์ก่อนตาย)
+    _env.__HAVOC_UI_MOUSE_KILL = function()
+        restoreMouse()
+        if self._mouseConn then pcall(function() self._mouseConn:Disconnect() end) end
+    end
+    self._restoreMouse = restoreMouse
 
     -- ── Toast notification (ขวาล่าง ซ้อนขึ้นบน) ──────────────────────
     local notifHolder = make("Frame", { Name = "Notifs", AnchorPoint = Vector2.new(1, 1),
@@ -358,6 +409,8 @@ function Library:CreateWindow(cfg)
     end
 
     function self:Destroy()
+        -- คืนเมาส์ก่อน disconnect — ไม่งั้น cursor ที่ lib เปิดไว้ค้างหลังปิด UI
+        if self._restoreMouse then pcall(self._restoreMouse) end
         if self._mouseConn then pcall(function() self._mouseConn:Disconnect() end) end
         pcall(function() self.gui:Destroy() end)
     end
