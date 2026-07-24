@@ -803,7 +803,7 @@ function Library:CreateWindow(cfg)
 
     -- header (สีเข้มกว่า main bg เหมือน toolbar)
     local header = make("Frame", { Name = "Header", Size = UDim2.new(1, 0, 0, 52),
-        BackgroundColor3 = T.header, BorderSizePixel = 0 }, { pad(0, 0, 18, 18), corner(15) })
+        BackgroundColor3 = T.header, BorderSizePixel = 0, ClipsDescendants = true }, { pad(0, 0, 18, 18), corner(15) })
     header.Parent = main
     local headerFill = make("Frame", { Size = UDim2.new(1, 0, 0.5, 0), Position = UDim2.new(0, 0, 0.5, 0),
         BackgroundColor3 = T.header, BorderSizePixel = 0 })
@@ -1148,10 +1148,27 @@ function Library:CreateTab(name, opts)
         for _, t in pairs(win.tabs) do
             t.page.Visible = false
             if t._navItem then t._navItem.setActive(false) end
+            if t._subStrip then t._subStrip.Visible = false end
+            if t._subLine then t._subLine.Visible = false end
+            if t._subTabs then
+                for _, st in pairs(t._subTabs) do st.page.Visible = false end
+            end
         end
         page.Visible = true
         item.setActive(true)
         win.activeTab = tab
+        if tab._subStrip then
+            tab._subStrip.Visible = true
+            tab._subLine.Visible = true
+            page.Visible = false
+            for _, st in pairs(tab._subTabs) do
+                if st.item then st.item.setActive(false) end
+            end
+            if tab._subTabs[1] then
+                tab._subTabs[1].page.Visible = true
+                tab._subTabs[1].item.setActive(true)
+            end
+        end
     end
     tab._navItem = item
     tab.btn.MouseButton1Click:Connect(activate)
