@@ -218,7 +218,14 @@ local Library do
                 for k, v in pairs(Goal) do
                     pcall(function() Item[k] = v end)
                 end
-                local Stub = { Info = Info, Goal = Goal, Item = Item, Tween = { Play = function() end, Cancel = function() end, Completed = { Connect = function() return { Disconnect = function() end } end } } }
+                local Stub = { Info = Info, Goal = Goal, Item = Item, Tween = {
+                    Play = function() end, Cancel = function() end,
+                    Completed = { Connect = function(_, cb)
+                        -- Fire immediately so page:Turn / any waiter unblocks.
+                        task.defer(function() pcall(cb, Enum.PlaybackState.Completed) end)
+                        return { Disconnect = function() end }
+                    end }
+                } }
                 setmetatable(Stub, Tween)
                 return Stub
             end
@@ -1069,7 +1076,7 @@ local Library do
             Color = FromRGB(0,0,0),
             Parent = Camera
         })
-            
+
         local BlockMesh = Instances:Create("BlockMesh", {Parent = Part.Instance})
 
         local DepthOfField = Instances:Create("DepthOfFieldEffect", {
@@ -1081,6 +1088,11 @@ local Library do
             NearIntensity = 1,
             Name = ""
         })
+
+        -- Track blur objects so UnloadAll can clean them up
+        Library._BlurObjects = Library._BlurObjects or {}
+        table.insert(Library._BlurObjects, Part.Instance)
+        table.insert(Library._BlurObjects, DepthOfField.Instance)
 
         Library:Connect(RunService.RenderStepped, function()
             if Window.IsOpen then
@@ -2168,6 +2180,54 @@ local Library do
             Library._NotifOff = not Bool
         end
 
+        -- Full teardown: destroys all UI + blur + cursor + connections. Idempotent.
+        function Library:UnloadAll()
+            pcall(function()
+                for _, C in ipairs(Library.Connections or {}) do
+                    pcall(function() if C.Connection then C.Connection:Disconnect() end end)
+                end
+                Library.Connections = {}
+            end)
+            for _, inst in ipairs(Library._BlurObjects or {}) do
+                pcall(function() if inst and inst.Parent then inst:Destroy() end end)
+            end
+            Library._BlurObjects = {}
+            pcall(function() if Library._Cursor then Library._Cursor:Destroy(); Library._Cursor = nil end end)
+            pcall(function() if Library._QuickBar then Library._QuickBar:Destroy(); Library._QuickBar = nil end end)
+            pcall(function() if Library._StatusBar then Library._StatusBar:Destroy(); Library._StatusBar = nil end end)
+            pcall(function() if Library._SearchBar then Library._SearchBar:Destroy(); Library._SearchBar = nil end end)
+            pcall(function() if Library._StatusConn then Library._StatusConn:Disconnect(); Library._StatusConn = nil end end)
+            pcall(function() if Library._CursorConn then Library._CursorConn:Disconnect(); Library._CursorConn = nil end end)
+            pcall(function() if Library.Holder and Library.Holder.Instance then Library.Holder.Instance:Destroy() end end)
+            pcall(function() if Library.UnusedHolder and Library.UnusedHolder.Instance then Library.UnusedHolder.Instance:Destroy() end end)
+        end
+
+        -- Custom mouse cursor that renders on TOP of the UI (game cursor gets hidden by frames).
+        function Library:ShowCursor(Bool)
+            if not Bool then
+                if Library._Cursor then Library._Cursor.Visible = false end
+                return
+            end
+            if not Library._Cursor then
+                local ic = Instance.new("ImageLabel")
+                ic.Name = "\0"; ic.Parent = Library.Holder.Instance
+                ic.BackgroundTransparency = 1; ic.BorderSizePixel = 0
+                ic.Size = UDim2.new(0, 20, 0, 20)
+                ic.ZIndex = 99999999
+                -- Simple triangle arrow cursor (rbx built-in)
+                ic.Image = "rbxassetid://81598136527047"
+                ic.ImageColor3 = Color3.fromRGB(255, 149, 0)
+                ic.AnchorPoint = Vector2.new(0, 0)
+                Library._Cursor = ic
+
+                Library._CursorConn = RunService.RenderStepped:Connect(function()
+                    local m = UserInputService:GetMouseLocation()
+                    ic.Position = UDim2.new(0, m.X - 2, 0, m.Y - 2)
+                end)
+            end
+            Library._Cursor.Visible = true
+        end
+
         function Library:SetNotificationCap(n)
             Library._NotifCap = tonumber(n) or 3
         end
@@ -2236,11 +2296,12 @@ local Library do
                 bar.BackgroundColor3 = Color3.fromRGB(19, 18, 22)
                 bar.BackgroundTransparency = 0.2
                 bar.BorderSizePixel = 0
-                bar.AnchorPoint = Vector2.new(0, 1)
-                bar.Position = UDim2.new(0, 0, 1, 0)
+                bar.AnchorPoint = Vector2.new(0, 0)
+                bar.Position = UDim2.new(0, 0, 1, 6)
                 bar.Size = UDim2.new(1, 0, 0, 22)
                 bar.ZIndex = 3
                 local cn = Instance.new("UICorner", bar); cn.CornerRadius = UDim.new(0, 6)
+                local st = Instance.new("UIStroke", bar); st.Color = Color3.fromRGB(60,60,68); st.Thickness = 1; st.Transparency = 0.4
 
                 local lbl = Instance.new("TextLabel", bar)
                 lbl.Name = "\0"
