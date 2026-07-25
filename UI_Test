@@ -490,7 +490,7 @@ local Library do
             local StartPosition = nil 
             local StartSize = nil
             
-            local EdgeThickness = 2
+            local EdgeThickness = 6
 
             local MakeEdge = function(Name, Position, Size)
                 local Button = Instances:Create("TextButton", {
@@ -508,6 +508,25 @@ local Library do
 
                 return Button
             end
+
+            -- Visible bottom-right corner grip (drag-to-resize handle)
+            local GripSize = 14
+            local Grip = Instances:Create("TextButton", {
+                Name = "\0",
+                Text = "",
+                BackgroundColor3 = FromRGB(255, 149, 0),
+                BackgroundTransparency = 0.35,
+                BorderSizePixel = 0,
+                AnchorPoint = Vector2New(1, 1),
+                Position = UDim2New(1, -4, 1, -4),
+                Size = UDim2New(0, GripSize, 0, GripSize),
+                ZIndex = 999999,
+                AutoButtonColor = false,
+                Parent = Gui,
+            })  Grip:AddToTheme({BackgroundColor3 = "Accent"})
+            Instances:Create("UICorner", {
+                Parent = Grip.Instance, Name = "\0", CornerRadius = UDimNew(0, 3)
+            })
 
             local Edges = {
                 {Button = MakeEdge(
@@ -562,16 +581,25 @@ local Library do
                 end
             end
 
-            for Index, Value in Edges do 
+            for Index, Value in Edges do
                 Value.Button:Connect("InputBegan", function(Input)
-                    if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1
+                    or Input.UserInputType == Enum.UserInputType.Touch then
                         BeginResizing(Value.Side)
                     end
                 end)
             end
 
+            Grip:Connect("InputBegan", function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                or Input.UserInputType == Enum.UserInputType.Touch then
+                    BeginResizing("BR")
+                end
+            end)
+
             Library:Connect(UserInputService.InputEnded, function(Input)
-                if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                or Input.UserInputType == Enum.UserInputType.Touch then
                     if Resizing then
                         EndResizing()
                     end
@@ -616,6 +644,9 @@ local Library do
                     if Window then
                         Window.Bottom.X = w
                     end
+                elseif CurrentSide == "BR" then
+                    w = StartSize.X + dx
+                    h = StartSize.Y + dy
                 end
             
                 if w < Minimum.X then
@@ -2050,7 +2081,7 @@ local Library do
 
             function KeybindList:Add(Name, Key)
                 local _keyStr = tostring(Key or "")
-                local _hidden = (_keyStr == "" or _keyStr:find("Unknown"))
+                local _hidden = (_keyStr == "" or _keyStr:find("Unknown") or _keyStr:find("None") or _keyStr == "nil")
                 local NewKey = Instances:Create("TextButton", {
                     Parent = Items["Content"].Instance,
                     Name = "\0",
@@ -2114,7 +2145,7 @@ local Library do
                 function NewKey:Set(Name, Key)
                     NewKeyText.Instance.Text = Name .. " ["..Key.."]"
                     local ks = tostring(Key or "")
-                    NewKey.Instance.Visible = not (ks == "" or ks:find("Unknown"))
+                    NewKey.Instance.Visible = not (ks == "" or ks:find("Unknown") or ks:find("None") or ks == "nil")
                 end
 
                 function NewKey:SetStatus(Bool)
