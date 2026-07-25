@@ -2204,41 +2204,50 @@ local Library do
         end
 
         -- Custom mouse cursor that renders on TOP of the UI (game cursor gets hidden by frames).
-        -- Hosted in its own ScreenGui with IgnoreGuiInset=true so it aligns with UserInputService coords.
+        -- Uses PlayerGui-style ScreenGui + LocalPlayer:GetMouse() X/Y so ScreenGui coord system
+        -- and mouse coord system share the same origin (below topbar).
         function Library:ShowCursor(Bool)
             if not Bool then
                 if Library._CursorGui then Library._CursorGui.Enabled = false end
                 return
             end
             if not Library._Cursor then
+                local Players = game:GetService("Players")
+                local LP = Players.LocalPlayer
+                local mouse = LP and LP:GetMouse()
+
                 local sg = Instance.new("ScreenGui")
                 sg.Name = "\0"; sg.Parent = gethui()
                 sg.ResetOnSpawn = false
-                sg.IgnoreGuiInset = true
+                sg.IgnoreGuiInset = false
                 sg.DisplayOrder = 999999999
                 Library._CursorGui = sg
 
                 local ic = Instance.new("ImageLabel")
                 ic.Name = "\0"; ic.Parent = sg
                 ic.BackgroundTransparency = 1; ic.BorderSizePixel = 0
-                ic.Size = UDim2.new(0, 32, 0, 32)
+                ic.Size = UDim2.new(0, 28, 0, 28)
                 ic.ZIndex = 99999999
                 ic.Image = "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png"
                 ic.ImageColor3 = Color3.fromRGB(255, 255, 255)
+                -- Cursor image has ~2px transparent border; anchor tip precisely at mouse.
                 ic.AnchorPoint = Vector2.new(0, 0)
                 Library._Cursor = ic
 
                 Library._CursorConn = RunService.RenderStepped:Connect(function()
                     if not ic.Parent then return end
-                    -- Hide cursor when window is closed (respects Win:SetOpen(false))
                     local win = Library._Window
                     if win and win.IsOpen == false then
                         if sg.Enabled then sg.Enabled = false end
                         return
                     end
                     if not sg.Enabled then sg.Enabled = true end
-                    local m = UserInputService:GetMouseLocation()
-                    ic.Position = UDim2.new(0, m.X, 0, m.Y)
+                    if mouse then
+                        ic.Position = UDim2.new(0, mouse.X - 2, 0, mouse.Y - 2)
+                    else
+                        local m = UserInputService:GetMouseLocation()
+                        ic.Position = UDim2.new(0, m.X - 2, 0, m.Y - 2 - 36)
+                    end
                 end)
             end
             Library._CursorGui.Enabled = true
