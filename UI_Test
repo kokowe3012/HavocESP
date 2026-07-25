@@ -2209,20 +2209,21 @@ local Library do
                 return
             end
             if not Library._Cursor then
+                -- Draw arrow using rbxasset default cursor (guaranteed built-in, no ID lookup)
                 local ic = Instance.new("ImageLabel")
                 ic.Name = "\0"; ic.Parent = Library.Holder.Instance
                 ic.BackgroundTransparency = 1; ic.BorderSizePixel = 0
-                ic.Size = UDim2.new(0, 20, 0, 20)
+                ic.Size = UDim2.new(0, 24, 0, 24)
                 ic.ZIndex = 99999999
-                -- Simple triangle arrow cursor (rbx built-in)
-                ic.Image = "rbxassetid://81598136527047"
-                ic.ImageColor3 = Color3.fromRGB(255, 149, 0)
+                ic.Image = "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png"
+                ic.ImageColor3 = Color3.fromRGB(255, 255, 255)
                 ic.AnchorPoint = Vector2.new(0, 0)
                 Library._Cursor = ic
 
                 Library._CursorConn = RunService.RenderStepped:Connect(function()
+                    if not ic.Parent then return end
                     local m = UserInputService:GetMouseLocation()
-                    ic.Position = UDim2.new(0, m.X - 2, 0, m.Y - 2)
+                    ic.Position = UDim2.new(0, m.X, 0, m.Y)
                 end)
             end
             Library._Cursor.Visible = true
@@ -3531,7 +3532,10 @@ local Library do
                     Flag = "MenuBind",
                     Default = Enum.KeyCode.Z,
                     Callback = function(Value)
-                        Window:SetOpen(Value)
+                        -- Callback fires during widget creation before Window:SetOpen is defined.
+                        if type(Window.SetOpen) == "function" then
+                            Window:SetOpen(Value)
+                        end
                     end
                 })
 
@@ -7080,7 +7084,13 @@ local Library do
 
                 local InputBegan
                 InputBegan = UserInputService.InputBegan:Connect(function(Input)
-                    if Input.UserInputType == Enum.UserInputType.Keyboard then 
+                    -- Reject mouse buttons — they'd fire on every click in-game and thrash the toggle.
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1
+                    or Input.UserInputType == Enum.UserInputType.MouseButton2
+                    or Input.UserInputType == Enum.UserInputType.MouseButton3 then
+                        return
+                    end
+                    if Input.UserInputType == Enum.UserInputType.Keyboard then
                         Keybind:Set(Input.KeyCode)
                     else
                         Keybind:Set(Input.UserInputType)
@@ -7096,20 +7106,25 @@ local Library do
                     return
                 end
 
-                if tostring(Input.KeyCode) == Keybind.Key then
-                    if Keybind.ModeSelected == "Toggle" then 
+                -- Skip mouse buttons — they should never fire feature toggles (thrashes on every click).
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                or Input.UserInputType == Enum.UserInputType.MouseButton2
+                or Input.UserInputType == Enum.UserInputType.MouseButton3 then
+                    -- Fall through to picking-window logic below only
+                elseif tostring(Input.KeyCode) == Keybind.Key then
+                    if Keybind.ModeSelected == "Toggle" then
                         Keybind:Press()
-                    elseif Keybind.ModeSelected == "Hold" then 
+                    elseif Keybind.ModeSelected == "Hold" then
                         Keybind:Press(true)
-                    elseif Keybind.ModeSelected == "Always" then 
+                    elseif Keybind.ModeSelected == "Always" then
                         Keybind:Press(true)
                     end
                 elseif tostring(Input.UserInputType) == Keybind.Key then
-                    if Keybind.ModeSelected == "Toggle" then 
+                    if Keybind.ModeSelected == "Toggle" then
                         Keybind:Press()
-                    elseif Keybind.ModeSelected == "Hold" then 
+                    elseif Keybind.ModeSelected == "Hold" then
                         Keybind:Press(true)
-                    elseif Keybind.ModeSelected == "Always" then 
+                    elseif Keybind.ModeSelected == "Always" then
                         Keybind:Press(true)
                     end
                 end
