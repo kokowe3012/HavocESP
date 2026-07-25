@@ -214,6 +214,15 @@ local Library do
             Item = IsRawItem and Item or Item.Instance
             Info = Info or TweenInfo.new(Library.Tween.Time, Library.Tween.Style, Library.Tween.Direction)
 
+            if Library._AnimOff then
+                for k, v in pairs(Goal) do
+                    pcall(function() Item[k] = v end)
+                end
+                local Stub = { Info = Info, Goal = Goal, Item = Item, Tween = { Play = function() end, Cancel = function() end, Completed = { Connect = function() return { Disconnect = function() end } end } } }
+                setmetatable(Stub, Tween)
+                return Stub
+            end
+
             local NewTween = {
                 Tween = TweenService:Create(Item, Info, Goal),
                 Info = Info,
@@ -703,16 +712,19 @@ local Library do
         Name = "\0",
         BackgroundTransparency = 1,
         Size = UDim2New(0, 0, 1, 0),
+        AnchorPoint = Vector2New(1, 0),
+        Position = UDim2New(1, 0, 0, 0),
         BorderColor3 = FromRGB(0, 0, 0),
         BorderSizePixel = 0,
         AutomaticSize = Enum.AutomaticSize.X,
         BackgroundColor3 = FromRGB(255, 255, 255)
     })
-    
+
     Instances:Create("UIListLayout", {
         Parent = Library.NotifHolder.Instance,
         Name = "\0",
         Padding = UDimNew(0, 12),
+        HorizontalAlignment = Enum.HorizontalAlignment.Right,
         SortOrder = Enum.SortOrder.LayoutOrder
     })
     
@@ -876,6 +888,25 @@ local Library do
         end)
 
         return Success, Result
+    end
+
+    Library.ExportConfig = function(self)
+        local json = Library:GetConfig()
+        pcall(function() if setclipboard then setclipboard(json) end end)
+        return json
+    end
+
+    Library.ImportConfig = function(self, Json)
+        if type(Json) ~= "string" or Json == "" then
+            return false, "empty payload"
+        end
+        local okDecode, decoded = pcall(function() return HttpService:JSONDecode(Json) end)
+        if not okDecode or type(decoded) ~= "table" then
+            return false, "invalid JSON"
+        end
+        local ok, err = Library:LoadConfig(Json)
+        if not ok then return false, tostring(err) end
+        return true
     end
 
     Library.DeleteConfig = function(self, Config)
@@ -2014,7 +2045,7 @@ local Library do
             end
 
             function KeybindList:SetVisibility(Bool)
-                Items["KeybindsList"].Instance.Visible = false
+                Items["KeybindsList"].Instance.Visible = Bool and true or false
             end
 
             function KeybindList:Add(Name, Key)
@@ -2097,8 +2128,176 @@ local Library do
             return KeybindList
         end
 
+        function Library:SetNotificationsEnabled(Bool)
+            Library._NotifOff = not Bool
+        end
+
+        function Library:SetAnimationsEnabled(Bool)
+            Library._AnimOff = not Bool
+        end
+
+        function Library:ShowSearch(Bool)
+            local Win = Library._Window; if not Win then return end
+            local tabs = Win.Items and Win.Items["LeftTabs"]; if not tabs then return end
+
+            if not Library._SearchBox then
+                local pad = Instance.new("Frame")
+                pad.Name = "\0"; pad.Parent = tabs.Instance
+                pad.BackgroundColor3 = Color3.fromRGB(19, 18, 22)
+                pad.BackgroundTransparency = 0.2
+                pad.BorderSizePixel = 0
+                pad.Position = UDim2.new(0, 12, 0, 8)
+                pad.Size = UDim2.new(1, -24, 0, 26)
+                pad.LayoutOrder = -999
+                local cn = Instance.new("UICorner", pad); cn.CornerRadius = UDim.new(0, 6)
+                local st = Instance.new("UIStroke", pad); st.Color = Color3.fromRGB(60,60,68); st.Thickness = 1; st.Transparency = 0.5
+
+                local box = Instance.new("TextBox", pad)
+                box.Name = "\0"
+                box.BackgroundTransparency = 1; box.BorderSizePixel = 0
+                box.Position = UDim2.new(0, 10, 0, 0); box.Size = UDim2.new(1, -20, 1, 0)
+                box.FontFace = Library.Font
+                box.TextColor3 = Color3.fromRGB(220,220,220); box.PlaceholderColor3 = Color3.fromRGB(120,120,128)
+                box.PlaceholderText = "Search features..."
+                box.Text = ""
+                box.TextSize = 13
+                box.TextXAlignment = Enum.TextXAlignment.Left
+                box.ClearTextOnFocus = false
+
+                box:GetPropertyChangedSignal("Text"):Connect(function()
+                    local q = string.lower(box.Text or "")
+                    for _, Page in ipairs(Win.Pages) do
+                        local btn = Page.Items and Page.Items["Inactive"]
+                        if btn then
+                            btn.Instance.Visible = (q == "") or (string.find(string.lower(Page.Name or ""), q, 1, true) ~= nil)
+                        end
+                    end
+                end)
+
+                Library._SearchBox = pad
+
+                local listLayout = tabs.Instance:FindFirstChildWhichIsA("UIListLayout")
+                if listLayout then
+                    local padTop = tabs.Instance:FindFirstChildWhichIsA("UIPadding")
+                    if padTop then padTop.PaddingTop = UDim.new(0, 42) end
+                end
+            end
+
+            Library._SearchBox.Visible = Bool and true or false
+        end
+
+        function Library:ShowStatusBar(Bool)
+            local Win = Library._Window; if not Win then return end
+            local mf = Win.Items and Win.Items["MainFrame"]; if not mf then return end
+
+            if not Library._StatusBar then
+                local bar = Instance.new("Frame")
+                bar.Name = "\0"; bar.Parent = mf.Instance
+                bar.BackgroundColor3 = Color3.fromRGB(19, 18, 22)
+                bar.BackgroundTransparency = 0.2
+                bar.BorderSizePixel = 0
+                bar.AnchorPoint = Vector2.new(0, 1)
+                bar.Position = UDim2.new(0, 0, 1, 0)
+                bar.Size = UDim2.new(1, 0, 0, 22)
+                bar.ZIndex = 3
+                local cn = Instance.new("UICorner", bar); cn.CornerRadius = UDim.new(0, 6)
+
+                local lbl = Instance.new("TextLabel", bar)
+                lbl.Name = "\0"
+                lbl.BackgroundTransparency = 1; lbl.BorderSizePixel = 0
+                lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(1, -24, 1, 0)
+                lbl.FontFace = Library.Font
+                lbl.TextColor3 = Color3.fromRGB(180,180,190)
+                lbl.TextSize = 12
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Text = "FPS: --  |  Ping: --  |  " .. (Library._StatusTier or "Free")
+                lbl.ZIndex = 4
+
+                Library._StatusBar = bar
+                Library._StatusLabel = lbl
+
+                local last, fps = tick(), 0
+                Library._StatusConn = RunService.Heartbeat:Connect(function()
+                    fps = fps + 1
+                    local now = tick()
+                    if now - last >= 0.5 then
+                        local rate = math.floor(fps / (now - last))
+                        local ping = math.floor((game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() or 0))
+                        lbl.Text = string.format("FPS: %d  |  Ping: %dms  |  %s", rate, ping, Library._StatusTier or "Free")
+                        fps = 0; last = now
+                    end
+                end)
+            end
+
+            Library._StatusBar.Visible = Bool and true or false
+        end
+
+        function Library:SetStatusTier(txt)
+            Library._StatusTier = tostring(txt or "")
+        end
+
+        function Library:ShowQuickActionBar(Bool)
+            local Win = Library._Window; if not Win then return end
+            local mf = Win.Items and Win.Items["MainFrame"]; if not mf then return end
+
+            if not Library._QuickBar then
+                local bar = Instance.new("Frame")
+                bar.Name = "\0"; bar.Parent = mf.Instance
+                bar.BackgroundColor3 = Color3.fromRGB(19, 18, 22)
+                bar.BackgroundTransparency = 0.15
+                bar.BorderSizePixel = 0
+                bar.AnchorPoint = Vector2.new(1, 0)
+                bar.Position = UDim2.new(1, -12, 0, 60)
+                bar.Size = UDim2.new(0, 300, 0, 34)
+                bar.ZIndex = 6
+                local cn = Instance.new("UICorner", bar); cn.CornerRadius = UDim.new(0, 8)
+                local st = Instance.new("UIStroke", bar); st.Color = Color3.fromRGB(60,60,68); st.Thickness = 1; st.Transparency = 0.4
+
+                local ll = Instance.new("UIListLayout", bar)
+                ll.FillDirection = Enum.FillDirection.Horizontal
+                ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
+                ll.VerticalAlignment = Enum.VerticalAlignment.Center
+                ll.SortOrder = Enum.SortOrder.LayoutOrder
+                ll.Padding = UDim.new(0, 4)
+                local pad = Instance.new("UIPadding", bar)
+                pad.PaddingLeft = UDim.new(0, 6); pad.PaddingRight = UDim.new(0, 6)
+
+                Library._QuickBar = bar
+                Library._QuickSlots = {}
+            end
+
+            Library._QuickBar.Visible = Bool and true or false
+        end
+
+        function Library:AddQuickAction(name, initialOn, callback)
+            self:ShowQuickActionBar(true)
+            local bar = Library._QuickBar
+            local btn = Instance.new("TextButton", bar)
+            btn.Name = "\0"
+            btn.BackgroundColor3 = initialOn and Color3.fromRGB(255,149,0) or Color3.fromRGB(35,35,42)
+            btn.BorderSizePixel = 0; btn.AutoButtonColor = false
+            btn.Size = UDim2.new(0, 44, 0, 22)
+            btn.FontFace = Library.Font
+            btn.TextColor3 = initialOn and Color3.fromRGB(20,10,0) or Color3.fromRGB(220,220,220)
+            btn.TextSize = 11
+            btn.Text = tostring(name)
+            btn.ZIndex = 7
+            local cn = Instance.new("UICorner", btn); cn.CornerRadius = UDim.new(0, 5)
+
+            local on = initialOn and true or false
+            btn.MouseButton1Click:Connect(function()
+                on = not on
+                btn.BackgroundColor3 = on and Color3.fromRGB(255,149,0) or Color3.fromRGB(35,35,42)
+                btn.TextColor3 = on and Color3.fromRGB(20,10,0) or Color3.fromRGB(220,220,220)
+                if callback then pcall(callback, on) end
+            end)
+            table.insert(Library._QuickSlots, btn)
+            return btn
+        end
+
         Library.Notification = function(self, Data)
-            local Items = { } do 
+            if Library._NotifOff then return end
+            local Items = { } do
                 Items["Notification"] = Instances:Create("Frame", {
                     Parent = Library.NotifHolder.Instance,
                     Name = "\0",
@@ -2290,13 +2489,11 @@ local Library do
                     BackgroundColor3 = FromRGB(27, 25, 29)
                 })  Items["MainFrame"]:AddToTheme({BackgroundColor3 = "Background"})
 
-                if IsMobile then 
-                    Instances:Create("UIScale", {
-                        Parent = Items["MainFrame"].Instance,
-                        Name = "\0",
-                        Scale = 0.699999988079071
-                    })                    
-                end
+                Items["UIScale"] = Instances:Create("UIScale", {
+                    Parent = Items["MainFrame"].Instance,
+                    Name = "\0",
+                    Scale = IsMobile and 0.7 or 1,
+                })
 
                 Items["MainFrame"]:MakeResizeable(Vector2New(Items["MainFrame"].Instance.AbsoluteSize.X, Items["MainFrame"].Instance.AbsoluteSize.Y), Vector2New(9999, 9999), OriginalSizes)
                 Library:MakeBlurred(Items["MainFrame"], Window)
@@ -2797,16 +2994,25 @@ local Library do
                 end
 
                 function Window:SetTransparency()
-                    Items["MainFrame"].Instance.BackgroundTransparency = Library.Flags["BackgroundTransparency"] 
-                    Items["LeftTabs"].Instance.BackgroundTransparency = Library.Flags["BackgroundTransparency"]  
+                    Items["MainFrame"].Instance.BackgroundTransparency = Library.Flags["BackgroundTransparency"]
+                    Items["LeftTabs"].Instance.BackgroundTransparency = Library.Flags["BackgroundTransparency"]
                     if IsMobile then
-                        Items["FloatingButton"].Instance.BackgroundTransparency = Library.Flags["BackgroundTransparency"]  
+                        Items["FloatingButton"].Instance.BackgroundTransparency = Library.Flags["BackgroundTransparency"]
                     end
 
-                    for _, Value in Items do 
+                    for _, Value in Items do
                         if _:find("___") then
                             Value.Instance.BackgroundTransparency = tonumber(Library.Flags["BackgroundTransparency"])
                         end
+                    end
+                end
+
+                function Window:SetScale(n)
+                    n = tonumber(n) or 1
+                    if n < 0.5 then n = 0.5 end
+                    if n > 1.5 then n = 1.5 end
+                    if Items["UIScale"] then
+                        Items["UIScale"].Instance.Scale = n
                     end
                 end
 
@@ -3212,8 +3418,9 @@ local Library do
                 })
 
                 Window.Items = Items
+                Library._Window = Window
             end
-            
+
             local Debounce = false
 
             function Window:SetCenter()
@@ -4777,9 +4984,17 @@ local Library do
                     --Items["Gradient"].Instance.Enabled = false
                 end
 
-                if Toggle.Callback then 
+                if Toggle.Callback then
                     Library:SafeCall(Toggle.Callback, Toggle.Value)
                 end
+            end
+
+            -- Set without firing callback (auto-apply resync, config load)
+            function Toggle:SilentSet(Value)
+                local CB = Toggle.Callback
+                Toggle.Callback = nil
+                Toggle:Set(Value)
+                Toggle.Callback = CB
             end
 
             local SettingsItem = { }
@@ -6166,6 +6381,37 @@ local Library do
 
             Dropdown.Section.Elements[#Dropdown.Section.Elements+1] = Dropdown
             return Dropdown
+        end
+
+        Library.Sections.Divider = function(self, Data)
+            Data = Data or { }
+            local Divider = {
+                Window = self.Window, Page = self.Page, Section = self,
+            }
+
+            local Wrap = Instances:Create("Frame", {
+                Parent = self.Items["Content"].Instance,
+                Name = "\0",
+                BackgroundTransparency = 1,
+                Size = UDim2New(1, 0, 0, 8),
+                BorderSizePixel = 0,
+            })
+            local Line = Instances:Create("Frame", {
+                Parent = Wrap.Instance,
+                Name = "\0",
+                AnchorPoint = Vector2New(0, 0.5),
+                Position = UDim2New(0, 0, 0.5, 0),
+                Size = UDim2New(1, 0, 0, 1),
+                BackgroundColor3 = FromRGB(60, 60, 68),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.55,
+            })  Line:AddToTheme({BackgroundColor3 = "Outline"})
+
+            function Divider:SetVisibility(Bool)
+                Wrap.Instance.Visible = Bool and true or false
+            end
+
+            return Divider
         end
 
         Library.Sections.Label = function(self, Name)
