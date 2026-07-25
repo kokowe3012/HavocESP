@@ -2049,6 +2049,8 @@ local Library do
             end
 
             function KeybindList:Add(Name, Key)
+                local _keyStr = tostring(Key or "")
+                local _hidden = (_keyStr == "" or _keyStr:find("Unknown"))
                 local NewKey = Instances:Create("TextButton", {
                     Parent = Items["Content"].Instance,
                     Name = "\0",
@@ -2061,6 +2063,7 @@ local Library do
                     Size = UDim2New(1, 0, 0, 20),
                     BorderSizePixel = 0,
                     TextSize = 14,
+                    Visible = not _hidden,
                     BackgroundColor3 = FromRGB(255, 255, 255)
                 })
                 
@@ -2110,6 +2113,8 @@ local Library do
 
                 function NewKey:Set(Name, Key)
                     NewKeyText.Instance.Text = Name .. " ["..Key.."]"
+                    local ks = tostring(Key or "")
+                    NewKey.Instance.Visible = not (ks == "" or ks:find("Unknown"))
                 end
 
                 function NewKey:SetStatus(Bool)
@@ -2130,6 +2135,10 @@ local Library do
 
         function Library:SetNotificationsEnabled(Bool)
             Library._NotifOff = not Bool
+        end
+
+        function Library:SetNotificationCap(n)
+            Library._NotifCap = tonumber(n) or 3
         end
 
         function Library:SetAnimationsEnabled(Bool)
@@ -2297,6 +2306,23 @@ local Library do
 
         Library.Notification = function(self, Data)
             if Library._NotifOff then return end
+
+            local _cap = tonumber(Library._NotifCap) or 3
+            local _kids = Library.NotifHolder.Instance:GetChildren()
+            local _framecnt = 0
+            for _, c in ipairs(_kids) do
+                if c:IsA("Frame") then _framecnt = _framecnt + 1 end
+            end
+            while _framecnt >= _cap do
+                local _oldest = nil
+                for _, c in ipairs(Library.NotifHolder.Instance:GetChildren()) do
+                    if c:IsA("Frame") then _oldest = c; break end
+                end
+                if not _oldest then break end
+                pcall(function() _oldest:Destroy() end)
+                _framecnt = _framecnt - 1
+            end
+
             local Items = { } do
                 Items["Notification"] = Instances:Create("Frame", {
                     Parent = Library.NotifHolder.Instance,
