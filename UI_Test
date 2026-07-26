@@ -1781,8 +1781,14 @@ local Library do
                 Colorpicker:Update()
             end
 
-            Items["ColorpickerButton"]:Connect("MouseButton1Down", function()
-                Colorpicker:SetOpen(not Colorpicker.IsOpen)
+            -- InputBegan instead of MouseButton1Down — see Toggle/Dropdown for
+            -- the same reasoning (some games suppress GuiButton-specific click
+            -- events; raw InputBegan survives since their own UI needs it too).
+            Items["ColorpickerButton"]:Connect("InputBegan", function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                   or Input.UserInputType == Enum.UserInputType.Touch then
+                    Colorpicker:SetOpen(not Colorpicker.IsOpen)
+                end
             end)
 
             Items["Palette"]:Connect("InputBegan", function(Input)
@@ -6639,8 +6645,15 @@ local Library do
                 end
             end
 
-            Items["RealDropdown"]:Connect("MouseButton1Down", function()
-                Dropdown:SetOpen(not Dropdown.IsOpen)
+            -- Wired to InputBegan (not MouseButton1Down/Click) — same reasoning
+            -- as the Toggle handler above: some games hook or suppress the
+            -- GuiButton-specific click events as an anti-automation measure
+            -- while leaving raw InputBegan alone (their own UI needs it too).
+            Items["RealDropdown"]:Connect("InputBegan", function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1
+                   or Input.UserInputType == Enum.UserInputType.Touch then
+                    Dropdown:SetOpen(not Dropdown.IsOpen)
+                end
             end)
 
             Library:Connect(UserInputService.InputBegan, function(Input)
