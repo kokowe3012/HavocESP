@@ -745,7 +745,15 @@ local Library do
         Parent = _resolveHost(),
         Name = "\0",
         ZIndexBehavior = Enum.ZIndexBehavior.Global,
-        DisplayOrder = 2,
+        -- DisplayOrder decides which ScreenGui wins across DIFFERENT ScreenGuis
+        -- (ZIndex only breaks ties within the same one) — the old value of 2
+        -- lost to practically anything else in the DataModel with a higher
+        -- order. Confirmed via probe: a foreign, invisible (Transparency=1)
+        -- but still-Active dropdown system was sitting at ZIndex=10 over ours
+        -- and silently eating clicks meant for our own Colorpicker/Dropdown
+        -- buttons (ZIndex=2) because ITS ScreenGui simply rendered on top of
+        -- ours entirely. Push ours far above any plausible game/other-script UI.
+        DisplayOrder = 2147483647,
         ResetOnSpawn = false
     })
 
