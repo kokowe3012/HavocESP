@@ -729,8 +729,20 @@ local Library do
         Library.Font = SemiBold
     end
 
+    -- Resolve host: gethui() preferred (survives respawn / persistent), fallback to
+    -- CoreGui, final fallback to LocalPlayer.PlayerGui. Without a fallback,
+    -- notifications silently no-op when gethui returns nil.
+    local function _resolveHost()
+        local h = gethui and gethui()
+        if h then return h end
+        local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+        if ok and cg then return cg end
+        local lp = game:GetService("Players").LocalPlayer
+        return lp and lp:FindFirstChildOfClass("PlayerGui")
+    end
+
     Library.Holder = Instances:Create("ScreenGui", {
-        Parent = gethui(),
+        Parent = _resolveHost(),
         Name = "\0",
         ZIndexBehavior = Enum.ZIndexBehavior.Global,
         DisplayOrder = 2,
@@ -738,7 +750,7 @@ local Library do
     })
 
     Library.UnusedHolder = Instances:Create("ScreenGui", {
-        Parent = gethui(),
+        Parent = _resolveHost(),
         Name = "\0",
         ZIndexBehavior = Enum.ZIndexBehavior.Global,
         Enabled = false,
@@ -2459,6 +2471,13 @@ local Library do
 
         Library.Notification = function(self, Data)
             if Library._NotifOff then return end
+            -- Defensive defaults: without these, nil Title/Description sets
+            -- TextLabel.Text = nil → engine error → outer pcall silently drops
+            -- the notif with no visible feedback (user reports "not showing").
+            Data = Data or {}
+            Data.Title       = Data.Title       or ""
+            Data.Description = Data.Description or ""
+            Data.Duration    = tonumber(Data.Duration) or 3
 
             local _cap = tonumber(Library._NotifCap) or 3
             local _kids = Library.NotifHolder.Instance:GetChildren()
@@ -2564,14 +2583,16 @@ local Library do
                     ImageColor3 = FromRGB(255, 255, 255),
                     BorderColor3 = FromRGB(0, 0, 0),
                     AnchorPoint = Vector2New(1, 0),
-                    Image = "rbxassetid://"..Data.Icon,
+                    -- Guard nil / non-string Icon (concat with nil = error → outer
+                    -- pcall drops the whole notif silently)
+                    Image = Data.Icon and ("rbxassetid://"..tostring(Data.Icon)) or "",
                     BackgroundTransparency = 1,
                     Position = UDim2New(1, 0, 0, 0),
                     Size = UDim2New(0, 16, 0, 16),
                     BorderSizePixel = 0,
                     BackgroundColor3 = FromRGB(255, 255, 255)
                 })
-                
+
                 if not Data.IconColor then
                     Instances:Create("UIGradient", {
                         Parent = Items["Icon"].Instance,
@@ -5486,29 +5507,40 @@ local Library do
 
             function Toggle:Keybind(Data)
                 Data = Data or { }
-
-                local Keybind = {
-                    Window = Toggle.Window,
-                    Page = Toggle.Page,
-                    Section = Toggle.Section,
-
-                    Flag = Data.Flag or Data.flag or Library:NextFlag(),
-                    Default = Data.Default or Data.default or Enum.KeyCode.E,
-                    Callback = Data.Callback or Data.callback or function() end,
-                    Mode = Data.Mode or Data.mode or "Toggle"
-                }
-
-                local NewKeybind, KeybindItems = Library:CreateKeybind({
-                    Parent = Items["SubElements"],
-                    Page = Keybind.Page,
-                    Section = Keybind.Section,
-                    Flag = Keybind.Flag,
-                    Default = Keybind.Default,
-                    Mode = Keybind.Mode,
-                    Callback = Keybind.Callback
+                -- The old body called Library:CreateKeybind (does not exist) and
+                -- referenced Items["SubElements"] which the Toggle builder never
+                -- creates — so inline keybinds silently failed. Delegate to the
+                -- full Section-level keybind builder (input handling, modes,
+                -- persistence), then hoist its compact KeyButton next to the
+                -- Toggle indicator so it reads "[✓] Feature name    [KEY]" on
+                -- a single row. The rest of the section-Keybind row (its Text
+                -- label + Modes dropdown) is parked in UnusedHolder — event
+                -- wiring is UIS-based so it survives the reparent.
+                local kb = Library.Sections.Keybind(Toggle.Section, {
+                    Name     = Data.Name or Data.name or Toggle.Name or "Keybind",
+                    Flag     = Data.Flag or Data.flag,
+                    Default  = Data.Default or Data.default,
+                    Mode     = Data.Mode or Data.mode or "Toggle",
+                    Callback = Data.Callback or Data.callback,
                 })
-
-                return NewKeybind
+                pcall(function()
+                    local kbItems = kb.Items
+                    if not kbItems then return end
+                    local sub = kbItems["SubElements"]
+                    if sub and sub.Instance then
+                        sub.Instance.Parent      = Items["Toggle"].Instance
+                        sub.Instance.AnchorPoint = Vector2New(1, 0.5)
+                        sub.Instance.Position    = UDim2New(1, -8, 0.5, 0)
+                        sub.Instance.Size        = UDim2New(0, 90, 0, 18)
+                    end
+                    -- Park the standalone label row (with its now-empty
+                    -- SubElements slot + Modes dropdown) off-screen so it
+                    -- doesn't consume vertical space in the section layout.
+                    if kbItems["Label"] and kbItems["Label"].Instance then
+                        kbItems["Label"].Instance.Parent = Library.UnusedHolder.Instance
+                    end
+                end)
+                return kb
             end
 
             function Toggle:RefreshPosition(Bool)
@@ -7293,7 +7325,10 @@ local Library do
             end
 
             Keybind.Section.Elements[#Keybind.Section.Elements+1] = Keybind
-            return Keybind 
+            -- Expose Items so callers (e.g. Toggle:Keybind inline reparenting) can
+            -- hoist the compact KeyButton without duplicating the builder.
+            Keybind.Items = Items
+            return Keybind
         end
 
         Library.Sections.Textbox = function(self, Data)
