@@ -757,13 +757,17 @@ local Library do
         ResetOnSpawn = false
     })
 
+    -- Notification anchor: bottom-right (user request 2026-07-26). Anchor 1,1 +
+    -- Position 1,0,1,0 pins it to the bottom-right of the ScreenGui; VerticalAlignment
+    -- Bottom + SortOrder LayoutOrder makes newer toasts appear at the bottom
+    -- (stacking upward), so the newest notif sits at the bottom edge.
     Library.NotifHolder  = Instances:Create("Frame", {
         Parent = Library.Holder.Instance,
         Name = "\0",
         BackgroundTransparency = 1,
         Size = UDim2New(0, 0, 1, 0),
-        AnchorPoint = Vector2New(1, 0),
-        Position = UDim2New(1, 0, 0, 0),
+        AnchorPoint = Vector2New(1, 1),
+        Position = UDim2New(1, 0, 1, 0),
         BorderColor3 = FromRGB(0, 0, 0),
         BorderSizePixel = 0,
         AutomaticSize = Enum.AutomaticSize.X,
@@ -775,6 +779,7 @@ local Library do
         Name = "\0",
         Padding = UDimNew(0, 12),
         HorizontalAlignment = Enum.HorizontalAlignment.Right,
+        VerticalAlignment = Enum.VerticalAlignment.Bottom,
         SortOrder = Enum.SortOrder.LayoutOrder
     })
     
@@ -5507,40 +5512,19 @@ local Library do
 
             function Toggle:Keybind(Data)
                 Data = Data or { }
-                -- The old body called Library:CreateKeybind (does not exist) and
-                -- referenced Items["SubElements"] which the Toggle builder never
-                -- creates — so inline keybinds silently failed. Delegate to the
-                -- full Section-level keybind builder (input handling, modes,
-                -- persistence), then hoist its compact KeyButton next to the
-                -- Toggle indicator so it reads "[✓] Feature name    [KEY]" on
-                -- a single row. The rest of the section-Keybind row (its Text
-                -- label + Modes dropdown) is parked in UnusedHolder — event
-                -- wiring is UIS-based so it survives the reparent.
-                local kb = Library.Sections.Keybind(Toggle.Section, {
-                    Name     = Data.Name or Data.name or Toggle.Name or "Keybind",
+                -- Deliberately no reparent — the previous "hoist SubElements next
+                -- to the toggle indicator" hack was fragile (Z-index / clipping /
+                -- theme-color inheritance issues). Just delegate to the standard
+                -- section-level keybind builder so it renders as a normal keybind
+                -- row directly below the toggle: visually adjacent, always visible,
+                -- input handling / mode picker / persistence all inherited unchanged.
+                return Library.Sections.Keybind(Toggle.Section, {
+                    Name     = Data.Name or Data.name or ("[" .. (Toggle.Name or "Keybind") .. "] Bind"),
                     Flag     = Data.Flag or Data.flag,
                     Default  = Data.Default or Data.default,
                     Mode     = Data.Mode or Data.mode or "Toggle",
                     Callback = Data.Callback or Data.callback,
                 })
-                pcall(function()
-                    local kbItems = kb.Items
-                    if not kbItems then return end
-                    local sub = kbItems["SubElements"]
-                    if sub and sub.Instance then
-                        sub.Instance.Parent      = Items["Toggle"].Instance
-                        sub.Instance.AnchorPoint = Vector2New(1, 0.5)
-                        sub.Instance.Position    = UDim2New(1, -8, 0.5, 0)
-                        sub.Instance.Size        = UDim2New(0, 90, 0, 18)
-                    end
-                    -- Park the standalone label row (with its now-empty
-                    -- SubElements slot + Modes dropdown) off-screen so it
-                    -- doesn't consume vertical space in the section layout.
-                    if kbItems["Label"] and kbItems["Label"].Instance then
-                        kbItems["Label"].Instance.Parent = Library.UnusedHolder.Instance
-                    end
-                end)
-                return kb
             end
 
             function Toggle:RefreshPosition(Bool)
@@ -7343,13 +7327,14 @@ local Library do
                 Default = Data.Default or Data.default or "",
                 Callback = Data.Callback or Data.callback or function() end,
                 Placeholder = Data.Placeholder or Data.placeholder or "Placeholder",
+                PlaceholderColor = Data.PlaceholderColor or Data.placeholdercolor,
                 Numeric = Data.Numeric or Data.numeric or false,
                 Finished = Data.Finished or Data.finished or false,
 
                 Value = ""
             }
 
-            local Items = { } do 
+            local Items = { } do
                 Items["Textbox"] = Instances:Create("Frame", {
                     Parent = Textbox.Section.Items["Content"].Instance,
                     Name = "\0",
@@ -7400,12 +7385,12 @@ local Library do
                     Position = UDim2New(0, 10, 0, 8),
                     BorderSizePixel = 0,
                     BackgroundTransparency = 1,
-                    PlaceholderColor3 = FromRGB(185, 185, 185),
+                    PlaceholderColor3 = Textbox.PlaceholderColor or FromRGB(185, 185, 185),
                     TextXAlignment = Enum.TextXAlignment.Left,
                     PlaceholderText = Textbox.Placeholder,
                     TextSize = 14,
                     BackgroundColor3 = FromRGB(255, 255, 255)
-                })  Items["Input"]:AddToTheme({TextColor3 = "Text"})               
+                })  Items["Input"]:AddToTheme({TextColor3 = "Text"})
             end
             
             function Textbox:Get()
