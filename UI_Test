@@ -4149,42 +4149,31 @@ local Library do
                     Items["Page"]:Tween(TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 60)})
                 end
 
-                local AllInstances = Items["Page"].Instance:GetDescendants()
-                TableInsert(AllInstances, Items["Page"].Instance)
+                -- Used to fade EVERY descendant of the page individually
+                -- (GetDescendants() on a page with many Sections/Toggles/
+                -- Sliders/Colorpickers easily returns 500-1500+ instances) —
+                -- each one spawning its own real TweenService tween, all
+                -- created synchronously in the same frame. That's what caused
+                -- the brief freeze on every tab switch. The page's own
+                -- Visible flag (set above) already shows/hides content
+                -- instantly and correctly; the position-slide + background-dim
+                -- tweens below are the only animation actually worth keeping
+                -- (cheap: 2 tweens instead of hundreds). This is a separate,
+                -- page-wide cosmetic fade — NOT the same system as Dropdown/
+                -- Colorpicker's own internal open/close fade, which is
+                -- untouched and still needed (per the "never strip fade —
+                -- breaks Dropdown OptionHolder" rule).
+                task.defer(function()
+                    Debounce = false
 
-                local NewTween
-
-                for Index, Value in AllInstances do
-                    local TransparencyProperty = Tween:GetProperty(Value)
-
-                    if not TransparencyProperty then
-                        continue
-                    end
-
-                    if type(TransparencyProperty) == "table" then
-                        for _, Property in TransparencyProperty do
-                            NewTween = Tween:FadeItem(Value, Property, Bool, 0.15)
+                    if not Page.Active then
+                        for Index, Value in Page.Sections do
+                            task.spawn(function()
+                                Value:TweenElements(false, true)
+                            end)
                         end
-                    else
-                        NewTween = Tween:FadeItem(Value, TransparencyProperty, Bool, 0.15)
                     end
-                end
-
-                if NewTween and NewTween.Tween then
-                    Library:Connect(NewTween.Tween.Completed, function()
-                        Debounce = false
-
-                        if not Page.Active then
-                            for Index, Value in Page.Sections do
-                                task.spawn(function()
-                                    Value:TweenElements(false, true)
-                                end)
-                            end
-                        end
-                    end)
-                else
-                    task.defer(function() Debounce = false end)
-                end
+                end)
             end
 
             Items["Inactive"]:Connect("MouseButton1Down", function()
