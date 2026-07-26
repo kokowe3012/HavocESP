@@ -3082,8 +3082,24 @@ local Library do
                     BackgroundColor3 = FromRGB(255, 255, 255)
                 })  Items["CloseIcon"]:AddToTheme({ImageColor3 = "Text"})        
                 
-                Items["CloseButton"]:Connect("MouseButton1Down", function()
-                    Library:Unload()
+                -- The X button now does the SAME full teardown as the in-game
+                -- Delete-key / "Unload script" button (getgenv().__HAVOC_ESP_CLEANUP),
+                -- not just Library:Unload() — that only tore down the UI itself
+                -- and left SA/NR/ESP connections and hooks running in the
+                -- background with no way to reach them again. Falls back to the
+                -- plain Library:Unload() if the consumer script never set that up
+                -- (e.g. HAVOC_UI used standalone). InputBegan instead of
+                -- MouseButton1Down — see Toggle/Dropdown/Colorpicker for why.
+                Items["CloseButton"]:Connect("InputBegan", function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1
+                       or Input.UserInputType == Enum.UserInputType.Touch then
+                        local cleanup = getgenv and getgenv().__HAVOC_ESP_CLEANUP
+                        if cleanup then
+                            pcall(cleanup)
+                        else
+                            Library:Unload()
+                        end
+                    end
                 end)
 
                 Items["CloseIconAccent"] = Instances:Create("Frame", {
@@ -4147,10 +4163,10 @@ local Library do
 
                     if type(TransparencyProperty) == "table" then
                         for _, Property in TransparencyProperty do
-                            NewTween = Tween:FadeItem(Value, Property, Bool, 0.05)
+                            NewTween = Tween:FadeItem(Value, Property, Bool, 0.15)
                         end
                     else
-                        NewTween = Tween:FadeItem(Value, TransparencyProperty, Bool, 0.05)
+                        NewTween = Tween:FadeItem(Value, TransparencyProperty, Bool, 0.15)
                     end
                 end
 
