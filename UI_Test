@@ -2203,51 +2203,45 @@ local Library do
             pcall(function() if Library.UnusedHolder and Library.UnusedHolder.Instance then Library.UnusedHolder.Instance:Destroy() end end)
         end
 
-        -- Custom mouse cursor. Uses PARENT=PlayerGui (not CoreGui/gethui) because
-        -- CoreGui often has inconsistent IgnoreGuiInset behavior across executors.
-        -- PlayerGui respects IgnoreGuiInset=true reliably, so cursor coords match
-        -- UserInputService:GetMouseLocation() which is already viewport-absolute
-        -- (top-left = 0,0 including topbar area) when parent gui ignores inset.
+        -- Custom mouse cursor.
+        --   Parent: gethui() — CoreGui always draws ABOVE PlayerGui, so putting the
+        --   cursor there is the only way to keep it above the HAVOC UI which also
+        --   lives in gethui(). Its own DisplayOrder wins among siblings.
+        --   Coord math: uses an invisible origin frame pinned at GUI (0,0) as a
+        --   reference, so the calculation works regardless of the ScreenGui's
+        --   IgnoreGuiInset behaviour or whatever the executor's gethui() does.
+        --   That's an EXACT calculation, not a guessed offset.
         function Library:ShowCursor(Bool)
             if not Bool then
                 if Library._CursorGui then Library._CursorGui.Enabled = false end
                 return
             end
             if not Library._Cursor then
-                local Players = game:GetService("Players")
-                local LP = Players.LocalPlayer
-                local pg = LP and LP:WaitForChild("PlayerGui", 5)
-                if not pg then return end
+                local parent = (gethui and gethui()) or game:GetService("CoreGui")
 
                 local sg = Instance.new("ScreenGui")
-                sg.Name = "\0"; sg.Parent = pg
+                sg.Name = "\0"; sg.Parent = parent
                 sg.ResetOnSpawn = false
-                -- MEASURED (probe_cursor_config.lua, inset.Y was 58 not 36 on this
-                -- device): GetMouseLocation() returns viewport-absolute coords that
-                -- INCLUDE the topbar. IgnoreGuiInset=true makes this ScreenGui's
-                -- origin also viewport-absolute → same frame, raw coords work, and
-                -- it auto-adapts if the inset changes (mobile/rotate/topbar hide).
-                -- Do NOT subtract GetGuiInset here; that double-corrects.
                 sg.IgnoreGuiInset = true
-                sg.DisplayOrder = 999999999
+                sg.DisplayOrder = 2147483647   -- max int; wins over any UI ScreenGui
                 Library._CursorGui = sg
+
+                -- Invisible reference: its AbsolutePosition IS the GUI's (0,0) in
+                -- screen coords. Any parent/inset behaviour is baked into it.
+                local origin = Instance.new("Frame", sg)
+                origin.BackgroundTransparency = 1
+                origin.BorderSizePixel = 0
+                origin.Position = UDim2.new(0, 0, 0, 0)
+                origin.Size = UDim2.new(0, 0, 0, 0)
+
+                Library.CursorSize = Library.CursorSize or 64
+                Library.CursorTip  = Library.CursorTip  or Vector2.new(0.50, 0.50)
 
                 local ic = Instance.new("ImageLabel")
                 ic.Name = "\0"; ic.Parent = sg
                 ic.BackgroundTransparency = 1; ic.BorderSizePixel = 0
-                -- ArrowCursor.png is a 64×64 sprite; render it at native size so it
-                -- looks exactly like Roblox's own cursor instead of a shrunken copy.
-                -- Tunable in one line if it ever needs nudging:
-                Library.CursorSize = Library.CursorSize or 64
-                -- Tip position as a FRACTION of the sprite, so it stays correct at any
-                -- size (AnchorPoint is relative, not pixels).
-                -- CALIBRATED in-game with probe_cursor_config.lua: ArrowCursor.png draws
-                -- its pointer CENTRED in the 64×64 sprite, so the tip lands on the mouse
-                -- point at AnchorPoint (0.5, 0.5) — not near the top-left corner as
-                -- first assumed. Override at runtime with Lib:SetCursor(size, tip).
-                Library.CursorTip = Library.CursorTip or Vector2.new(0.50, 0.50)
                 ic.Size = UDim2.new(0, Library.CursorSize, 0, Library.CursorSize)
-                ic.ZIndex = 99999999
+                ic.ZIndex = 2147483647
                 ic.Image = "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png"
                 ic.ImageColor3 = Color3.fromRGB(255, 255, 255)
                 ic.AnchorPoint = Library.CursorTip
@@ -2261,8 +2255,10 @@ local Library do
                         return
                     end
                     if not sg.Enabled then sg.Enabled = true end
+                    -- Screen-absolute mouse → GUI-local by subtracting origin's abs.
                     local m = UserInputService:GetMouseLocation()
-                    ic.Position = UDim2.new(0, m.X, 0, m.Y)
+                    local o = origin.AbsolutePosition
+                    ic.Position = UDim2.new(0, m.X - o.X, 0, m.Y - o.Y)
                 end)
             end
             Library._CursorGui.Enabled = true
@@ -6544,22 +6540,10 @@ local Library do
                 end
             end)
 
-            -- Auto-close when the dropdown BUTTON scrolls out of view. Original code
-            -- checked OptionHolder (the reparented menu) — but OptionHolder lives on
-            -- Library.Holder (top ScreenGui) and is expected to extend beyond the
-            -- section, so IsClipped=true was spuriously firing on dropdowns near the
-            -- bottom of a column (e.g. Aim Colors on the Display page → click did
-            -- nothing because the menu was immediately closed the same frame).
-            Items["RealDropdown"]:Connect("Changed", function(Property)
-                if Property == "AbsolutePosition" and Dropdown.IsOpen then
-                    local clipped = Library:IsClipped(Items["RealDropdown"].Instance, Dropdown.Section.Items["Section"].Instance.Parent)
-                    if getgenv().__HAVOC_DD_DEBUG and clipped then
-                        print(("[DD] AUTO-CLOSE (button clipped) flag=%s"):format(tostring(Dropdown.Flag)))
-                    end
-                    Dropdown.IsOpen = not clipped
-                    Items["OptionHolder"].Instance.Visible = Dropdown.IsOpen
-                end
-            end)
+            -- Auto-close on scroll REMOVED. Original code did IsClipped on either
+            -- OptionHolder or the button, but AbsolutePosition Changed fires many
+            -- times as layouts settle on page open — closing the dropdown in the
+            -- same frame it was opened. Users can dismiss by clicking outside.
 
             for Index, Value in Dropdown.Items do 
                 Dropdown:Add(Value)
