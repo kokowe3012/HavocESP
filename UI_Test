@@ -6183,7 +6183,13 @@ local Library do
             local RenderStepped 
 
             function Dropdown:SetOpen(Bool)
-                if Debounce then 
+                if getgenv().__HAVOC_DD_DEBUG then
+                    local tag = tostring(Dropdown.Flag or Dropdown.Name or "?")
+                    print(("[DD] SetOpen(%s) flag=%s debounce=%s isOpen=%s"):format(
+                        tostring(Bool), tag, tostring(Debounce), tostring(Dropdown.IsOpen)))
+                end
+                if Debounce then
+                    if getgenv().__HAVOC_DD_DEBUG then print("[DD]   -> BLOCKED by debounce") end
                     return
                 end
 
@@ -6538,9 +6544,19 @@ local Library do
                 end
             end)
 
+            -- Auto-close when the dropdown BUTTON scrolls out of view. Original code
+            -- checked OptionHolder (the reparented menu) — but OptionHolder lives on
+            -- Library.Holder (top ScreenGui) and is expected to extend beyond the
+            -- section, so IsClipped=true was spuriously firing on dropdowns near the
+            -- bottom of a column (e.g. Aim Colors on the Display page → click did
+            -- nothing because the menu was immediately closed the same frame).
             Items["RealDropdown"]:Connect("Changed", function(Property)
                 if Property == "AbsolutePosition" and Dropdown.IsOpen then
-                    Dropdown.IsOpen = not Library:IsClipped(Items["OptionHolder"].Instance, Dropdown.Section.Items["Section"].Instance.Parent)
+                    local clipped = Library:IsClipped(Items["RealDropdown"].Instance, Dropdown.Section.Items["Section"].Instance.Parent)
+                    if getgenv().__HAVOC_DD_DEBUG and clipped then
+                        print(("[DD] AUTO-CLOSE (button clipped) flag=%s"):format(tostring(Dropdown.Flag)))
+                    end
+                    Dropdown.IsOpen = not clipped
                     Items["OptionHolder"].Instance.Visible = Dropdown.IsOpen
                 end
             end)
