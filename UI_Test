@@ -793,19 +793,27 @@ local Library do
     })    
 
     Library.Unload = function(self)
-        for Index, Value in self.Connections do 
+        for Index, Value in self.Connections do
             Value.Connection:Disconnect()
         end
 
-        for Index, Value in self.Threads do 
+        for Index, Value in self.Threads do
             coroutine.close(Value)
         end
 
-        if self.Holder then 
+        -- These two run their own persistent RenderStepped/Heartbeat loops
+        -- outside self.Connections — without disconnecting them here, they keep
+        -- firing every frame after Library is nil'd below and spam "attempt to
+        -- index nil" errors forever (the window's own X-close button calls this
+        -- Unload, not UnloadAll, which is why this path matters).
+        pcall(function() if self._mouseConn then self._mouseConn:Disconnect() end end)
+        pcall(function() if self._StatusConn then self._StatusConn:Disconnect() end end)
+
+        if self.Holder then
             self.Holder:Clean()
         end
 
-        Library = nil 
+        Library = nil
         getgenv().Library = nil
     end
 
@@ -2263,7 +2271,16 @@ local Library do
 
             local holderSg = Library.Holder and Library.Holder.Instance
 
-            Library._mouseConn = RunService.RenderStepped:Connect(function()
+            local mouseConn
+            mouseConn = RunService.RenderStepped:Connect(function()
+                -- Library:Unload() sets the whole `Library` upvalue to nil without
+                -- disconnecting this loop (it's not tracked in self.Connections) —
+                -- without disconnecting here, the closure fires every frame forever
+                -- against a nil Library, spamming "attempt to index nil" errors.
+                if not Library then
+                    if mouseConn then mouseConn:Disconnect() end
+                    return
+                end
                 -- Holder ScreenGui gone (UnloadAll, external destroy) → this loop
                 -- is orphaned. Restore mouse and unhook so we don't fight the game
                 -- forever.
@@ -2294,6 +2311,7 @@ local Library do
                     restoreMouse()
                 end
             end)
+            Library._mouseConn = mouseConn
 
             envG.__HAVOC_UI_MOUSE_KILL = function()
                 restoreMouse()
@@ -2396,7 +2414,12 @@ local Library do
                 Library._StatusLabel = lbl
 
                 local last, fps = tick(), 0
-                Library._StatusConn = RunService.Heartbeat:Connect(function()
+                local statusConn
+                statusConn = RunService.Heartbeat:Connect(function()
+                    -- Same nil-Library-after-Unload issue as _mouseConn above:
+                    -- Library:Unload() sets the Library upvalue to nil without
+                    -- disconnecting this loop, so it fires forever afterwards.
+                    if not Library then statusConn:Disconnect(); return end
                     fps = fps + 1
                     local now = tick()
                     if now - last >= 0.5 then
@@ -2406,6 +2429,7 @@ local Library do
                         fps = 0; last = now
                     end
                 end)
+                Library._StatusConn = statusConn
             end
 
             Library._StatusBar.Visible = Bool and true or false
