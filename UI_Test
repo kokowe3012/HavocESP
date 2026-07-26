@@ -807,6 +807,7 @@ local Library do
         -- index nil" errors forever (the window's own X-close button calls this
         -- Unload, not UnloadAll, which is why this path matters).
         pcall(function() if self._mouseConn then self._mouseConn:Disconnect() end end)
+        pcall(function() if self._behaviorConn then self._behaviorConn:Disconnect() end end)
         pcall(function() if self._StatusConn then self._StatusConn:Disconnect() end end)
 
         if self.Holder then
@@ -2221,6 +2222,7 @@ local Library do
             -- disconnect the RenderStepped loop.
             pcall(function() if Library._restoreMouse then Library._restoreMouse() end end)
             pcall(function() if Library._mouseConn then Library._mouseConn:Disconnect(); Library._mouseConn = nil end end)
+            pcall(function() if Library._behaviorConn then Library._behaviorConn:Disconnect(); Library._behaviorConn = nil end end)
             pcall(function() if Library._QuickBar then Library._QuickBar:Destroy(); Library._QuickBar = nil end end)
             pcall(function() if Library._StatusBar then Library._StatusBar:Destroy(); Library._StatusBar = nil end end)
             pcall(function() if Library._SearchBar then Library._SearchBar:Destroy(); Library._SearchBar = nil end end)
@@ -2313,10 +2315,40 @@ local Library do
             end)
             Library._mouseConn = mouseConn
 
+            -- The RenderStepped poll above only catches LockCenter on the frame
+            -- it fires — if the GAME'S OWN camera/aim script also hooks
+            -- RenderStepped and happens to run AFTER ours in the same frame (Roblox
+            -- doesn't guarantee cross-script connection order), it re-locks
+            -- MouseBehavior back to LockCenter before that frame's real click
+            -- hit-testing happens. Symptom: clicks on small precise targets
+            -- (Colorpicker swatches, Dropdown rows) silently miss while big Toggle
+            -- switches still work, because the engine's actual cursor position
+            -- snapped back to center right before the hit-test — same root cause
+            -- as the earlier "ADS FOV gets overwritten by the game" bug, same fix:
+            -- GetPropertyChangedSignal fires synchronously the instant ANY script
+            -- changes the property, so re-snapping here always wins the last-write
+            -- regardless of connection order (frame-order independent).
+            local behaviorConn
+            behaviorConn = UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
+                if not Library then
+                    if behaviorConn then behaviorConn:Disconnect() end
+                    return
+                end
+                local win = Library._Window
+                local uiOpen = Library._CursorWanted and not (win and win.IsOpen == false)
+                if uiOpen and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                    forcedUnlock = true
+                end
+            end)
+            Library._behaviorConn = behaviorConn
+
             envG.__HAVOC_UI_MOUSE_KILL = function()
                 restoreMouse()
                 if Library._mouseConn then pcall(function() Library._mouseConn:Disconnect() end) end
+                if Library._behaviorConn then pcall(function() Library._behaviorConn:Disconnect() end) end
                 Library._mouseConn = nil
+                Library._behaviorConn = nil
             end
         end
 
