@@ -2241,7 +2241,11 @@ local Library do
                 Library.CursorSize = Library.CursorSize or 64
                 -- Tip position as a FRACTION of the sprite, so it stays correct at any
                 -- size (AnchorPoint is relative, not pixels).
-                Library.CursorTip = Library.CursorTip or Vector2.new(0.09, 0.05)
+                -- CALIBRATED in-game with probe_cursor_config.lua: ArrowCursor.png draws
+                -- its pointer CENTRED in the 64×64 sprite, so the tip lands on the mouse
+                -- point at AnchorPoint (0.5, 0.5) — not near the top-left corner as
+                -- first assumed. Override at runtime with Lib:SetCursor(size, tip).
+                Library.CursorTip = Library.CursorTip or Vector2.new(0.50, 0.50)
                 ic.Size = UDim2.new(0, Library.CursorSize, 0, Library.CursorSize)
                 ic.ZIndex = 99999999
                 ic.Image = "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png"
