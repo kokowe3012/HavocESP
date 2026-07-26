@@ -6840,6 +6840,11 @@ local Library do
                 return NewColorpicker
             end
 
+            -- Expose Items so callers can add their own overlay controls (e.g.
+            -- a full-row invisible click-catcher next to a small Colorpicker
+            -- swatch button) without needing a library change per case.
+            Label.Items = Items
+
             Label.Section.Elements[#Label.Section.Elements+1] = Label
             return Label
         end
