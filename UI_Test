@@ -2252,6 +2252,13 @@ local Library do
             if Library._mouseConn then return end
 
             local forcedIcon, forcedUnlock = false, false
+            -- Remember whatever lock mode the GAME had before we forced Default,
+            -- so closing the UI hands control back exactly as we found it —
+            -- covers LockCenter (aim-lock shooters) AND LockCurrentPosition
+            -- (some games use this as their persistent default too, not only
+            -- during a right-click camera-drag — restoreMouse used to always
+            -- snap back to LockCenter specifically, which was wrong for those).
+            local savedBehavior = nil
 
             local function restoreMouse()
                 if forcedIcon then
@@ -2259,8 +2266,9 @@ local Library do
                     forcedIcon = false
                 end
                 if forcedUnlock then
-                    pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter end)
+                    pcall(function() UserInputService.MouseBehavior = savedBehavior or Enum.MouseBehavior.LockCenter end)
                     forcedUnlock = false
+                    savedBehavior = nil
                 end
             end
             Library._restoreMouse = restoreMouse
@@ -2296,9 +2304,22 @@ local Library do
                 local uiOpen = Library._CursorWanted and not (win and win.IsOpen == false)
 
                 if uiOpen then
-                    -- Unlock ONLY LockCenter (first-person / shift-lock). Leave
-                    -- LockCurrentPosition alone — that's camera drag.
-                    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                    -- Force Default regardless of WHICH lock mode the game is
+                    -- using. Originally this only unlocked LockCenter and
+                    -- deliberately left LockCurrentPosition alone (assumed to be
+                    -- camera-drag only) — but some games default to
+                    -- LockCurrentPosition persistently for normal aiming, not
+                    -- just during a right-click drag, and in that case leaving
+                    -- it alone means the UI opens with the cursor still locked,
+                    -- so every click coordinate the engine hit-tests against is
+                    -- the lock point, not where the visible cursor/click actually
+                    -- lands — big Toggle switches still get hit by luck (huge
+                    -- hitbox) while small Colorpicker/Dropdown targets miss
+                    -- consistently. Remember whichever mode was active so
+                    -- restoreMouse() can hand it back correctly.
+                    local mb = UserInputService.MouseBehavior
+                    if mb == Enum.MouseBehavior.LockCenter or mb == Enum.MouseBehavior.LockCurrentPosition then
+                        if not forcedUnlock then savedBehavior = mb end
                         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
                         forcedUnlock = true
                     end
@@ -2315,19 +2336,19 @@ local Library do
             end)
             Library._mouseConn = mouseConn
 
-            -- The RenderStepped poll above only catches LockCenter on the frame
-            -- it fires — if the GAME'S OWN camera/aim script also hooks
-            -- RenderStepped and happens to run AFTER ours in the same frame (Roblox
-            -- doesn't guarantee cross-script connection order), it re-locks
-            -- MouseBehavior back to LockCenter before that frame's real click
-            -- hit-testing happens. Symptom: clicks on small precise targets
-            -- (Colorpicker swatches, Dropdown rows) silently miss while big Toggle
-            -- switches still work, because the engine's actual cursor position
-            -- snapped back to center right before the hit-test — same root cause
-            -- as the earlier "ADS FOV gets overwritten by the game" bug, same fix:
+            -- The RenderStepped poll above only catches the lock on the frame it
+            -- fires — if the GAME'S OWN camera/aim script also hooks RenderStepped
+            -- and happens to run AFTER ours in the same frame (Roblox doesn't
+            -- guarantee cross-script connection order), it re-locks MouseBehavior
+            -- right back before that frame's real click hit-testing happens.
+            -- Symptom: clicks on small precise targets (Colorpicker swatches,
+            -- Dropdown rows) silently miss while big Toggle switches still work,
+            -- because the engine's actual cursor position snapped back to the
+            -- lock point right before the hit-test — same root cause as the
+            -- earlier "ADS FOV gets overwritten by the game" bug, same fix:
             -- GetPropertyChangedSignal fires synchronously the instant ANY script
-            -- changes the property, so re-snapping here always wins the last-write
-            -- regardless of connection order (frame-order independent).
+            -- changes the property, so re-snapping here always wins the
+            -- last-write regardless of connection order (frame-order independent).
             local behaviorConn
             behaviorConn = UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
                 if not Library then
@@ -2336,7 +2357,9 @@ local Library do
                 end
                 local win = Library._Window
                 local uiOpen = Library._CursorWanted and not (win and win.IsOpen == false)
-                if uiOpen and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+                local mb = UserInputService.MouseBehavior
+                if uiOpen and (mb == Enum.MouseBehavior.LockCenter or mb == Enum.MouseBehavior.LockCurrentPosition) then
+                    if not forcedUnlock then savedBehavior = mb end
                     UserInputService.MouseBehavior = Enum.MouseBehavior.Default
                     forcedUnlock = true
                 end
