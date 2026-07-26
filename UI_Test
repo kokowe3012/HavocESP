@@ -2203,23 +2203,24 @@ local Library do
             pcall(function() if Library.UnusedHolder and Library.UnusedHolder.Instance then Library.UnusedHolder.Instance:Destroy() end end)
         end
 
-        -- Custom mouse cursor that renders on TOP of the UI (game cursor gets hidden by frames).
-        -- Uses PlayerGui-style ScreenGui + LocalPlayer:GetMouse() X/Y so ScreenGui coord system
-        -- and mouse coord system share the same origin (below topbar).
+        -- Custom mouse cursor that renders on TOP of the UI.
+        -- gethui() returns CoreGui on many executors, which effectively ignores GuiInset
+        -- regardless of ScreenGui.IgnoreGuiInset. So use IgnoreGuiInset=true +
+        -- GetMouseLocation + add GuiService inset back → alignment works in both
+        -- CoreGui and PlayerGui, PC and mobile.
         function Library:ShowCursor(Bool)
             if not Bool then
                 if Library._CursorGui then Library._CursorGui.Enabled = false end
                 return
             end
             if not Library._Cursor then
-                local Players = game:GetService("Players")
-                local LP = Players.LocalPlayer
-                local mouse = LP and LP:GetMouse()
+                local GuiService = game:GetService("GuiService")
+                local inset = GuiService:GetGuiInset()  -- Vector2(0, 36) on desktop
 
                 local sg = Instance.new("ScreenGui")
                 sg.Name = "\0"; sg.Parent = gethui()
                 sg.ResetOnSpawn = false
-                sg.IgnoreGuiInset = false
+                sg.IgnoreGuiInset = true
                 sg.DisplayOrder = 999999999
                 Library._CursorGui = sg
 
@@ -2230,7 +2231,7 @@ local Library do
                 ic.ZIndex = 99999999
                 ic.Image = "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png"
                 ic.ImageColor3 = Color3.fromRGB(255, 255, 255)
-                -- Cursor image has ~2px transparent border; anchor tip precisely at mouse.
+                -- ArrowCursor.png tip is at ~(2, 2) inside the 28×28 sprite.
                 ic.AnchorPoint = Vector2.new(0, 0)
                 Library._Cursor = ic
 
@@ -2242,12 +2243,10 @@ local Library do
                         return
                     end
                     if not sg.Enabled then sg.Enabled = true end
-                    if mouse then
-                        ic.Position = UDim2.new(0, mouse.X - 2, 0, mouse.Y - 2)
-                    else
-                        local m = UserInputService:GetMouseLocation()
-                        ic.Position = UDim2.new(0, m.X - 2, 0, m.Y - 2 - 36)
-                    end
+                    local m = UserInputService:GetMouseLocation()
+                    -- GetMouseLocation returns coords excluding topbar; add inset back
+                    -- because ScreenGui.IgnoreGuiInset=true places (0,0) at absolute top.
+                    ic.Position = UDim2.new(0, m.X - 2, 0, m.Y - 2 + inset.Y)
                 end)
             end
             Library._CursorGui.Enabled = true
