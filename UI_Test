@@ -2222,9 +2222,13 @@ local Library do
                 local sg = Instance.new("ScreenGui")
                 sg.Name = "\0"; sg.Parent = pg
                 sg.ResetOnSpawn = false
-                -- IgnoreGuiInset=false: origin below topbar. GetMouseLocation also
-                -- returns coords below topbar. Same reference frame → no math needed.
-                sg.IgnoreGuiInset = false
+                -- MEASURED (probe_cursor_config.lua, inset.Y was 58 not 36 on this
+                -- device): GetMouseLocation() returns viewport-absolute coords that
+                -- INCLUDE the topbar. IgnoreGuiInset=true makes this ScreenGui's
+                -- origin also viewport-absolute → same frame, raw coords work, and
+                -- it auto-adapts if the inset changes (mobile/rotate/topbar hide).
+                -- Do NOT subtract GetGuiInset here; that double-corrects.
+                sg.IgnoreGuiInset = true
                 sg.DisplayOrder = 999999999
                 Library._CursorGui = sg
 
@@ -7120,7 +7124,17 @@ local Library do
                     or Input.UserInputType == Enum.UserInputType.MouseButton3 then
                         return
                     end
+                    -- Focus / Touch / MouseMovement / MouseWheel are not bindable:
+                    -- they carry KeyCode.Unknown and would then fire on every window
+                    -- refocus or tap. Keep waiting for a real key instead.
+                    if Input.UserInputType == Enum.UserInputType.Focus
+                    or Input.UserInputType == Enum.UserInputType.Touch
+                    or Input.UserInputType == Enum.UserInputType.MouseMovement
+                    or Input.UserInputType == Enum.UserInputType.MouseWheel then
+                        return
+                    end
                     if Input.UserInputType == Enum.UserInputType.Keyboard then
+                        if Input.KeyCode == Enum.KeyCode.Unknown then return end
                         Keybind:Set(Input.KeyCode)
                     else
                         Keybind:Set(Input.UserInputType)
@@ -7131,8 +7145,34 @@ local Library do
                 end)
             end)
 
+            -- An unbound keybind has Key = "Enum.KeyCode.Unknown". EVERY non-keyboard
+            -- input reports KeyCode == Unknown — including UserInputType.Focus (fires
+            -- when the Roblox window regains focus) and Touch (every tap on mobile).
+            -- Without this check, unbound keybinds fire on window refocus / any tap,
+            -- flipping their feature toggles and rewriting the config on its own.
+            local function IsUnboundOrUnknown(Input)
+                if Keybind.Value == "None" or Keybind.Value == "Unknown" then return true end
+                if Keybind.Key == "Enum.KeyCode.Unknown" or Keybind.Key == nil then return true end
+                if Input and Input.KeyCode == Enum.KeyCode.Unknown
+                   and Input.UserInputType ~= Enum.UserInputType.MouseButton1
+                   and Input.UserInputType ~= Enum.UserInputType.MouseButton2
+                   and Input.UserInputType ~= Enum.UserInputType.MouseButton3 then
+                    -- Non-keyboard, non-mouse-button event (Focus / Touch / Wheel /
+                    -- Gamepad axis): can only match a keybind that is itself unbound.
+                    if StringFind(tostring(Keybind.Key), "KeyCode") then return true end
+                end
+                return false
+            end
+
             Library:Connect(UserInputService.InputBegan, function(Input)
-                if Keybind.Value == "None" then
+                if IsUnboundOrUnknown(Input) then
+                    -- Still allow the picking-window close logic below to run.
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 and Keybind.IsOpen then
+                        if not (Library:IsMouseOverFrame(Items["KeybindWindow"])
+                             or Library:IsMouseOverFrame(Items["OptionHolder"])) then
+                            Keybind:SetOpen(false)
+                        end
+                    end
                     return
                 end
 
@@ -7173,7 +7213,7 @@ local Library do
             end)
 
             Library:Connect(UserInputService.InputEnded, function(Input)
-                if Keybind.Value == "None" then
+                if IsUnboundOrUnknown(Input) then
                     return
                 end
 
