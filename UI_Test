@@ -3769,14 +3769,28 @@ local Library do
                     end
                 })
 
-                Settings:Keybind({
+                local MenuKeybindObj
+                local menuDefaultKey = Enum.KeyCode.Z
+                if UITheme.MenuBind then
+                    local ok, kc = pcall(function() return Enum.KeyCode[UITheme.MenuBind] end)
+                    if ok and kc then menuDefaultKey = kc end
+                end
+
+                MenuKeybindObj = Settings:Keybind({
                     Name = "Menu Keybind",
                     Flag = "MenuBind",
-                    Default = (UITheme.MenuBind and Enum.KeyCode[UITheme.MenuBind]) or Enum.KeyCode.Z,
+                    Default = menuDefaultKey,
                     Callback = function(Value)
                         -- Callback fires during widget creation before Window:SetOpen is defined.
                         if type(Window.SetOpen) == "function" then
                             Window:SetOpen(Value)
+                        end
+                        if MenuKeybindObj and MenuKeybindObj.Key then
+                            local name = tostring(MenuKeybindObj.Key):match("Enum%.KeyCode%.(.+)")
+                            if name then
+                                UITheme.MenuBind = name
+                                SaveUITheme()
+                            end
                         end
                     end
                 })
