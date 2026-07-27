@@ -199,6 +199,45 @@ local Library do
 
     Library.Theme = TableClone(Themes["Preset"])
 
+    -- ── UI Settings-panel persistence (user request 2026-07-27) ──────────────
+    -- The gear-icon Settings panel (First/Second gradient color, Font weight,
+    -- Background Transparency, Menu Keybind) never saved anything — every
+    -- reload reset to the library defaults. Persist to a small standalone
+    -- file, independent of any consumer script's own config (HAVOC_UI.lua can
+    -- be loaded by other scripts too), loaded once here and re-applied before
+    -- the Settings widgets are built so their Default already reflects the
+    -- saved values.
+    local UI_THEME_FILE = "HAVOC_UI_theme.json"
+    local UITheme = { }
+    do
+        local ok, data = pcall(function()
+            if isfile and isfile(UI_THEME_FILE) and readfile then
+                return HttpService:JSONDecode(readfile(UI_THEME_FILE))
+            end
+        end)
+        if ok and type(data) == "table" then UITheme = data end
+    end
+    local _uiThemeSaveQueued = false
+    local function SaveUITheme()
+        if _uiThemeSaveQueued then return end
+        _uiThemeSaveQueued = true
+        task.spawn(function()
+            task.wait(0.3)
+            _uiThemeSaveQueued = false
+            pcall(function()
+                if writefile then writefile(UI_THEME_FILE, HttpService:JSONEncode(UITheme)) end
+            end)
+        end)
+    end
+    if UITheme.Accent then
+        local c = UITheme.Accent
+        pcall(function() Library.Theme.Accent = FromRGB(c[1], c[2], c[3]) end)
+    end
+    if UITheme.AccentGradient then
+        local c = UITheme.AccentGradient
+        pcall(function() Library.Theme.AccentGradient = FromRGB(c[1], c[2], c[3]) end)
+    end
+
     -- Folders
     for Index, Value in Library.Folders do 
         if not isfolder(Value) then
@@ -726,7 +765,7 @@ local Library do
             ["Light"] = Light
         }
 
-        Library.Font = SemiBold
+        Library.Font = (UITheme.FontStyle and Library.Fonts[UITheme.FontStyle]) or SemiBold
     end
 
     -- Resolve host: gethui() preferred (survives respawn / persistent), fallback to
@@ -3682,6 +3721,8 @@ local Library do
                     Callback = function(Color)
                         Library.Theme.Accent = Color
                         Library:ChangeTheme("Accent", Color)
+                        UITheme.Accent = { math.floor(Color.R*255+0.5), math.floor(Color.G*255+0.5), math.floor(Color.B*255+0.5) }
+                        SaveUITheme()
                     end
                 })
 
@@ -3691,13 +3732,15 @@ local Library do
                     Callback = function(Color)
                         Library.Theme.AccentGradient = Color
                         Library:ChangeTheme("AccentGradient", Color)
+                        UITheme.AccentGradient = { math.floor(Color.R*255+0.5), math.floor(Color.G*255+0.5), math.floor(Color.B*255+0.5) }
+                        SaveUITheme()
                     end
                 })
 
                 Settings:Dropdown({
                     Name = "Font weight",
                     Flag = "FontStyle",
-                    Default = "SemiBold",
+                    Default = UITheme.FontStyle or "SemiBold",
                     Items = {"Light", "Regular", "SemiBold"},
                     Callback = function(Value)
                         local FontData = Library.Fonts[Value]
@@ -3705,13 +3748,15 @@ local Library do
                         if FontData then
                             Library.Font = FontData
                             Library:UpdateText()
+                            UITheme.FontStyle = Value
+                            SaveUITheme()
                         end
                     end
                 })
 
                 Settings:Slider({
                     Name = "Background Transparency",
-                    Default = 0.12,
+                    Default = UITheme.BackgroundTransparency or 0.12,
                     Decimals = 0.01,
                     Max = 1,
                     Min = 0,
@@ -3719,13 +3764,15 @@ local Library do
                     Flag = "BackgroundTransparency",
                     Callback = function(Value)
                         Window:SetTransparency(Value)
+                        UITheme.BackgroundTransparency = Value
+                        SaveUITheme()
                     end
                 })
 
                 Settings:Keybind({
                     Name = "Menu Keybind",
                     Flag = "MenuBind",
-                    Default = Enum.KeyCode.Z,
+                    Default = (UITheme.MenuBind and Enum.KeyCode[UITheme.MenuBind]) or Enum.KeyCode.Z,
                     Callback = function(Value)
                         -- Callback fires during widget creation before Window:SetOpen is defined.
                         if type(Window.SetOpen) == "function" then
@@ -7278,9 +7325,19 @@ local Library do
 
                 local InputBegan
                 InputBegan = UserInputService.InputBegan:Connect(function(Input)
-                    -- Reject mouse buttons — they'd fire on every click in-game and thrash the toggle.
+                    -- Right-click while picking = explicit unbind, same as pressing
+                    -- Backspace (reuses the existing Backspace->"None" display path
+                    -- in Keybind:Set below) — convenient clear gesture, still can't
+                    -- be BOUND as a real key since MouseButton2 itself is still
+                    -- rejected below like the other mouse buttons.
+                    if Input.UserInputType == Enum.UserInputType.MouseButton2 then
+                        Keybind:Set(Enum.KeyCode.Backspace)
+                        InputBegan:Disconnect()
+                        InputBegan = nil
+                        return
+                    end
+                    -- Reject remaining mouse buttons — they'd fire on every click in-game and thrash the toggle.
                     if Input.UserInputType == Enum.UserInputType.MouseButton1
-                    or Input.UserInputType == Enum.UserInputType.MouseButton2
                     or Input.UserInputType == Enum.UserInputType.MouseButton3 then
                         return
                     end
