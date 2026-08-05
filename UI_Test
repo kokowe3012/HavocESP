@@ -193,7 +193,7 @@ local Library do
             ["Section Background"] = FromRGB(20, 12, 6), -- Deep warm section background
             ["Section Background 2"] = FromRGB(28, 18, 9),-- Alternate section, warm tint
             ["Accent"] = FromRGB(255, 149, 0),           -- Orange accent
-            ["Element"] = FromRGB(40, 26, 13)            -- Brighter warm gray so toggles/inputs stand out from the background
+            ["Element"] = FromRGB(64, 44, 22)            -- Brighter warm gray so toggles/inputs stand out from the background
         }
     }
 
