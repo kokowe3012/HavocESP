@@ -5919,6 +5919,7 @@ local Library do
                     AutoButtonColor = false,
                     AnchorPoint = Vector2New(0, 1),
                     BorderSizePixel = 0,
+                    ClipsDescendants = true,
                     Position = UDim2New(0, 20, 1, -3),
                     Size = UDim2New(1, -40, 0, 7),
                     ZIndex = 2,
@@ -6393,8 +6394,16 @@ local Library do
                     end)
                     
                     RenderStepped = RunService.RenderStepped:Connect(function()
-                        Items["OptionHolder"].Instance.Position = UDim2New(0, Items["RealDropdown"].Instance.AbsolutePosition.X, 0, Items["RealDropdown"].Instance.AbsolutePosition.Y + Items["RealDropdown"].Instance.AbsoluteSize.Y + 5)
-                        Items["OptionHolder"].Instance.Size = UDim2New(0, Items["RealDropdown"].Instance.AbsoluteSize.X, 0, Dropdown.OptionHolderSize)
+                        local ddPos   = Items["RealDropdown"].Instance.AbsolutePosition
+                        local ddSize  = Items["RealDropdown"].Instance.AbsoluteSize
+                        local listH   = Dropdown.OptionHolderSize
+                        local screenH = workspace.CurrentCamera.ViewportSize.Y
+                        local belowY  = ddPos.Y + ddSize.Y + 5
+                        -- Flip the list above the dropdown when there's no room below,
+                        -- so it stops spilling past the bottom of the screen/window.
+                        local openY = (belowY + listH > screenH) and (ddPos.Y - listH - 5) or belowY
+                        Items["OptionHolder"].Instance.Position = UDim2New(0, ddPos.X, 0, openY)
+                        Items["OptionHolder"].Instance.Size = UDim2New(0, ddSize.X, 0, listH)
                     end)
 
                     for Index, Value in Library.OpenFrames do 
