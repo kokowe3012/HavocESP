@@ -185,15 +185,15 @@ local Library do
     local Themes = {
         ["Preset"] = {
             ["AccentGradient"] = FromRGB(255, 179, 71),   -- Slightly deeper blue accent
-            ["Background 2"] = FromRGB(10, 10, 12),      -- Very dark gray
-            ["Background"] = FromRGB(12, 12, 14),        -- Main near-black background
+            ["Background 2"] = FromRGB(20, 12, 6),       -- Dark warm brown-black
+            ["Background"] = FromRGB(24, 14, 7),         -- Main background, dark orange fade instead of flat black
             ["Text"] = FromRGB(235, 235, 235),           -- Slightly dimmed light text
-            ["Outline"] = FromRGB(25, 25, 28),           -- Subtle outline, almost invisible
-            ["Section Top"] = FromRGB(28, 27, 31),       -- Dark section header
-            ["Section Background"] = FromRGB(10, 10, 12),-- Deep black section background
-            ["Section Background 2"] = FromRGB(14, 14, 16),-- Alternate section, minimal difference
-            ["Accent"] = FromRGB(255, 149, 0),           -- Darker blue accent for consistency
-            ["Element"] = FromRGB(16, 16, 18)            -- Deep gray for UI elements
+            ["Outline"] = FromRGB(48, 30, 12),           -- Warm outline, visible against the tinted background
+            ["Section Top"] = FromRGB(42, 27, 13),       -- Dark section header
+            ["Section Background"] = FromRGB(20, 12, 6), -- Deep warm section background
+            ["Section Background 2"] = FromRGB(28, 18, 9),-- Alternate section, warm tint
+            ["Accent"] = FromRGB(255, 149, 0),           -- Orange accent
+            ["Element"] = FromRGB(40, 26, 13)            -- Brighter warm gray so toggles/inputs stand out from the background
         }
     }
 
@@ -2818,7 +2818,7 @@ local Library do
                     Name = "\0",
                     BorderColor3 = FromRGB(0, 0, 0),
                     AnchorPoint = Vector2New(0.5, 0.5),
-                    BackgroundTransparency = 0.12,
+                    BackgroundTransparency = 0.35,
                     Position = UDim2New(0.5519999861717224, 0, 0.5, 0),
                     Size = UDim2New(0, 677, 0, 644),
                     ZIndex = 2,
@@ -2841,7 +2841,7 @@ local Library do
                     Visible = true,
                     BorderColor3 = FromRGB(0, 0, 0),
                     AnchorPoint = Vector2New(1, 0),
-                    BackgroundTransparency = 0.15,
+                    BackgroundTransparency = 0.35,
                     Size = UDim2New(0, 225, 1, 0),
                     ZIndex = 2,
                     BorderSizePixel = 0,
@@ -3752,7 +3752,7 @@ local Library do
 
                 Settings:Slider({
                     Name = "Background Transparency",
-                    Default = UITheme.BackgroundTransparency or 0.12,
+                    Default = UITheme.BackgroundTransparency or 0.35,
                     Decimals = 0.01,
                     Max = 1,
                     Min = 0,
@@ -7786,9 +7786,20 @@ local Library do
             end
 
             function Dropdown:Set(Option)
-                if Dropdown.Multi then 
-                    if type(Option) ~= "table" then 
+                if Dropdown.Multi then
+                    if type(Option) ~= "table" then
                         return
+                    end
+
+                    -- Deselect any currently-active options first (mirrors the
+                    -- single-select branch below). Without this, calling Set()
+                    -- to load a saved config only ADDS the new selection and
+                    -- never removes previously-active items.
+                    for _, OptionData in pairs(Dropdown.Options) do
+                        if OptionData.Selected then
+                            OptionData.Selected = false
+                            OptionData:Toggle("Inactive")
+                        end
                     end
 
                     Dropdown.Value = Option
@@ -7796,12 +7807,12 @@ local Library do
 
                     for Index, Value in Option do
                         local OptionData = Dropdown.Options[Value]
-                         
+
                         if not OptionData then
                             continue
                         end
 
-                        OptionData.Selected = true 
+                        OptionData.Selected = true
                         OptionData:Toggle("Active")
                     end
                 else
@@ -7816,16 +7827,16 @@ local Library do
 
                     for Index, Value in Dropdown.Options do
                         if Value ~= OptionData then
-                            Value.Selected = false 
+                            Value.Selected = false
                             Value:Toggle("Inactive")
                         else
-                            Value.Selected = true 
+                            Value.Selected = true
                             Value:Toggle("Active")
                         end
                     end
                 end
 
-                if Dropdown.Callback then   
+                if Dropdown.Callback then
                     Library:SafeCall(Dropdown.Callback, Dropdown.Value)
                 end
             end
