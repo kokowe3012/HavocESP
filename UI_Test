@@ -2746,7 +2746,7 @@ local Library do
                     Name = "\0",
                     BorderColor3 = FromRGB(0, 0, 0),
                     AnchorPoint = Vector2New(0.5, 0.5),
-                    BackgroundTransparency = 0.35,
+                    BackgroundTransparency = 0,
                     Position = UDim2New(0.5519999861717224, 0, 0.5, 0),
                     Size = UDim2New(0, 677, 0, 644),
                     ZIndex = 2,
@@ -2769,7 +2769,7 @@ local Library do
                     Visible = true,
                     BorderColor3 = FromRGB(0, 0, 0),
                     AnchorPoint = Vector2New(1, 0),
-                    BackgroundTransparency = 0.35,
+                    BackgroundTransparency = 0,
                     Size = UDim2New(0, 225, 1, 0),
                     ZIndex = 2,
                     BorderSizePixel = 0,
@@ -3680,7 +3680,7 @@ local Library do
 
                 Settings:Slider({
                     Name = "Background Transparency",
-                    Default = UITheme.BackgroundTransparency or 0.35,
+                    Default = UITheme.BackgroundTransparency or 0,
                     Decimals = 0.01,
                     Max = 1,
                     Min = 0,
