@@ -5919,7 +5919,6 @@ local Library do
                     AutoButtonColor = false,
                     AnchorPoint = Vector2New(0, 1),
                     BorderSizePixel = 0,
-                    ClipsDescendants = true,
                     Position = UDim2New(0, 20, 1, -3),
                     Size = UDim2New(1, -40, 0, 7),
                     ZIndex = 2,
