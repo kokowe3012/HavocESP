@@ -2798,10 +2798,10 @@ local Library do
                 Items["LeftTabs"]:Connect("InputBegan", function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                         Dragging = true
-    
+
                         DragStart = Input.Position
                         StartPosition = Gui.Position
-    
+
                         Input.Changed:Connect(function()
                             if Input.UserInputState == Enum.UserInputState.End then
                                 Dragging = false
@@ -2809,7 +2809,36 @@ local Library do
                         end)
                     end
                 end)
-    
+
+                -- DungeonLoot patch: also allow dragging from the top header strip (logo
+                -- + title area), matching normal window title-bar behavior. ZIndex 1 (the
+                -- library default) so it sits BELOW CloseButton/SettingsButton (ZIndex 2,
+                -- created further down) and doesn't steal their clicks — plain sibling
+                -- z-ordering already keeps LeftTabs (ZIndex 2) working over it too.
+                Items["HeaderDragHandle"] = Instances:Create("Frame", {
+                    Parent = Items["MainFrame"].Instance,
+                    Name = "\0",
+                    BackgroundTransparency = 1,
+                    Size = UDim2New(1, 0, 0, 60),
+                    Position = UDim2New(0, 0, 0, 0),
+                    BorderSizePixel = 0
+                })
+
+                Items["HeaderDragHandle"]:Connect("InputBegan", function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                        Dragging = true
+
+                        DragStart = Input.Position
+                        StartPosition = Gui.Position
+
+                        Input.Changed:Connect(function()
+                            if Input.UserInputState == Enum.UserInputState.End then
+                                Dragging = false
+                            end
+                        end)
+                    end
+                end)
+
                 Library:Connect(UserInputService.InputChanged, function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
                         if Dragging then
