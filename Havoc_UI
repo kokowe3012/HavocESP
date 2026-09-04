@@ -2789,19 +2789,28 @@ local Library do
                     Items["MainFrame"]:Tween(TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2New(StartPosition.X.Scale, StartPosition.X.Offset + DragDelta.X, StartPosition.Y.Scale, StartPosition.Y.Offset + DragDelta.Y)})
                 end
     
-                -- DungeonLoot patch: the stock library made the ENTIRE MainFrame draggable
-                -- (clicking/dragging anywhere in the window, including content, moved the
-                -- whole window) — conflicted with the custom drag-to-reorder rows below.
-                -- Disabled here; LeftTabs (the sidebar) below still drags the window, same
-                -- as the real HAVOC client, so dragging from the sidebar/edge still works.
+                Items["MainFrame"]:Connect("InputBegan", function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                        Dragging = true
+    
+                        DragStart = Input.Position
+                        StartPosition = Gui.Position
+    
+                        Input.Changed:Connect(function()
+                            if Input.UserInputState == Enum.UserInputState.End then
+                                Dragging = false
+                            end
+                        end)
+                    end
+                end)
 
                 Items["LeftTabs"]:Connect("InputBegan", function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                         Dragging = true
-
+    
                         DragStart = Input.Position
                         StartPosition = Gui.Position
-
+    
                         Input.Changed:Connect(function()
                             if Input.UserInputState == Enum.UserInputState.End then
                                 Dragging = false
@@ -2809,36 +2818,7 @@ local Library do
                         end)
                     end
                 end)
-
-                -- DungeonLoot patch: also allow dragging from the top header strip (logo
-                -- + title area), matching normal window title-bar behavior. ZIndex 1 (the
-                -- library default) so it sits BELOW CloseButton/SettingsButton (ZIndex 2,
-                -- created further down) and doesn't steal their clicks — plain sibling
-                -- z-ordering already keeps LeftTabs (ZIndex 2) working over it too.
-                Items["HeaderDragHandle"] = Instances:Create("Frame", {
-                    Parent = Items["MainFrame"].Instance,
-                    Name = "\0",
-                    BackgroundTransparency = 1,
-                    Size = UDim2New(1, 0, 0, 60),
-                    Position = UDim2New(0, 0, 0, 0),
-                    BorderSizePixel = 0
-                })
-
-                Items["HeaderDragHandle"]:Connect("InputBegan", function(Input)
-                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                        Dragging = true
-
-                        DragStart = Input.Position
-                        StartPosition = Gui.Position
-
-                        Input.Changed:Connect(function()
-                            if Input.UserInputState == Enum.UserInputState.End then
-                                Dragging = false
-                            end
-                        end)
-                    end
-                end)
-
+    
                 Library:Connect(UserInputService.InputChanged, function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
                         if Dragging then
@@ -4181,13 +4161,18 @@ local Library do
                 end)
             end
 
-            Items["Inactive"]:Connect("MouseButton1Down", function()
-                for Index, Value in Page.Window.Pages do 
-                    if Value == Page and Page.Active then
-                        return
-                    end
+            -- InputBegan แทน MouseButton1Down/TouchTap — executor บางตัว (เช่น Delta บน MuMu emulator)
+            -- inject touch input แบบไม่ trigger Roblox engine's synthetic TouchTap gesture event
+            -- แต่ raw InputBegan รับ input ได้เสมอ (Toggle ก็ใช้ pattern นี้อยู่แล้วและทำงานปกติ)
+            Items["Inactive"]:Connect("InputBegan", function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                    for Index, Value in Page.Window.Pages do
+                        if Value == Page and Page.Active then
+                            return
+                        end
 
-                    Value:Turn(Value == Page)
+                        Value:Turn(Value == Page)
+                    end
                 end
             end)
 
@@ -5800,8 +5785,11 @@ local Library do
                 end
             end
 
-            Items["Button"]:Connect("MouseButton1Down", function()
-                Button:Press()
+            -- InputBegan แทน MouseButton1Down/TouchTap — เหตุผลเดียวกับ Page tab click (ดูคอมเมนต์ที่นั่น)
+            Items["Button"]:Connect("InputBegan", function(Input)
+                if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                    Button:Press()
+                end
             end)
 
             return Button
