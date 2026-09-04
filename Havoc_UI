@@ -6615,8 +6615,11 @@ local Library do
                     end
                 end
 
-                OptionData.Button:Connect("MouseButton1Down", function()
-                    OptionData:Set()
+                OptionData.Button:Connect("InputBegan", function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1
+                       or Input.UserInputType == Enum.UserInputType.Touch then
+                        OptionData:Set()
+                    end
                 end)
 
                 Dropdown.Options[OptionData.Name] = OptionData
@@ -7927,8 +7930,11 @@ local Library do
                     end
                 end
 
-                OptionData.Button:Connect("MouseButton1Down", function()
-                    OptionData:Set()
+                OptionData.Button:Connect("InputBegan", function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1
+                       or Input.UserInputType == Enum.UserInputType.Touch then
+                        OptionData:Set()
+                    end
                 end)
 
                 Dropdown.Options[OptionData.Name] = OptionData
