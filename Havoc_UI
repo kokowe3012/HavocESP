@@ -184,7 +184,7 @@ local Library do
 
     local Themes = {
         ["Preset"] = {
-            ["AccentGradient"] = FromRGB(255, 179, 71),   -- Slightly deeper blue accent
+            ["AccentGradient"] = FromRGB(230, 190, 134),  -- #E6BE86
             ["Background 2"] = FromRGB(20, 12, 6),       -- Dark warm brown-black
             ["Background"] = FromRGB(24, 14, 7),         -- Main background, dark orange fade instead of flat black
             ["Text"] = FromRGB(235, 235, 235),           -- Slightly dimmed light text
@@ -192,7 +192,7 @@ local Library do
             ["Section Top"] = FromRGB(42, 27, 13),       -- Dark section header
             ["Section Background"] = FromRGB(20, 12, 6), -- Deep warm section background
             ["Section Background 2"] = FromRGB(28, 18, 9),-- Alternate section, warm tint
-            ["Accent"] = FromRGB(255, 149, 0),           -- Orange accent
+            ["Accent"] = FromRGB(227, 11, 11),           -- #E30B0B
             ["Element"] = FromRGB(64, 44, 22)            -- Brighter warm gray so toggles/inputs stand out from the background
         }
     }
@@ -3680,7 +3680,7 @@ local Library do
 
                 Settings:Slider({
                     Name = "Background Transparency",
-                    Default = UITheme.BackgroundTransparency or 0,
+                    Default = UITheme.BackgroundTransparency or 0.28,
                     Decimals = 0.01,
                     Max = 1,
                     Min = 0,
