@@ -3694,11 +3694,13 @@ local Library do
                 })
 
                 local MenuKeybindObj
-                local menuDefaultKey = Enum.KeyCode.Z
+                local menuDefaultKey = Enum.KeyCode.LeftControl
                 if UITheme.MenuBind then
                     local ok, kc = pcall(function() return Enum.KeyCode[UITheme.MenuBind] end)
                     if ok and kc then menuDefaultKey = kc end
                 end
+
+                local MenuKeybindLabel = Settings:Label("Toggle UI Key: " .. tostring(menuDefaultKey):match("Enum%.KeyCode%.(.+)"))
 
                 MenuKeybindObj = Settings:Keybind({
                     Name = "Menu Keybind",
@@ -3714,6 +3716,9 @@ local Library do
                             if name then
                                 UITheme.MenuBind = name
                                 SaveUITheme()
+                                if MenuKeybindLabel then
+                                    MenuKeybindLabel:SetText("Toggle UI Key: " .. name)
+                                end
                             end
                         end
                     end
