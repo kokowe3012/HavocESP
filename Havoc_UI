@@ -2754,10 +2754,18 @@ local Library do
                     BackgroundColor3 = FromRGB(27, 25, 29)
                 })  Items["MainFrame"]:AddToTheme({BackgroundColor3 = "Background"})
 
+                local _mobileScale = 1
+                if IsMobile then
+                    local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2New(677, 644)
+                    local scaleX = (vp.X * 0.92) / 677
+                    local scaleY = (vp.Y * 0.85) / 644
+                    _mobileScale = math.min(scaleX, scaleY, 1)
+                    if _mobileScale < 0.35 then _mobileScale = 0.35 end
+                end
                 Items["UIScale"] = Instances:Create("UIScale", {
                     Parent = Items["MainFrame"].Instance,
                     Name = "\0",
-                    Scale = IsMobile and 0.7 or 1,
+                    Scale = _mobileScale,
                 })
 
                 Items["MainFrame"]:MakeResizeable(Vector2New(Items["MainFrame"].Instance.AbsoluteSize.X, Items["MainFrame"].Instance.AbsoluteSize.Y), Vector2New(9999, 9999), OriginalSizes)
