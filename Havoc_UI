@@ -6857,6 +6857,91 @@ local Library do
             return Label
         end
 
+        Library.Sections.Paragraph = function(self, Data)
+            Data = Data or {}
+
+            local Para = {
+                Window = self.Window,
+                Page = self.Page,
+                Section = self,
+                Name = Data.Name or Data.name or "Paragraph",
+                Content = Data.Content or Data.content or "",
+            }
+
+            local Items = {} do
+                Items["Frame"] = Instances:Create("Frame", {
+                    Parent = Para.Section.Items["Content"].Instance,
+                    Name = "\0",
+                    BackgroundTransparency = 1,
+                    Size = UDim2New(1, 0, 0, 0),
+                    BorderSizePixel = 0,
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                })
+
+                Items["Header"] = Instances:Create("TextLabel", {
+                    Parent = Items["Frame"].Instance,
+                    Name = "\0",
+                    FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold),
+                    TextColor3 = FromRGB(240, 240, 240),
+                    Text = Para.Name,
+                    TextSize = 14,
+                    Size = UDim2New(1, -10, 0, 20),
+                    Position = UDim2New(0, 5, 0, 3),
+                    BackgroundTransparency = 1,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    TextWrapped = true,
+                    BorderSizePixel = 0,
+                    ZIndex = 2,
+                })  Items["Header"]:AddToTheme({TextColor3 = "Text"})
+
+                Items["Body"] = Instances:Create("TextLabel", {
+                    Parent = Items["Frame"].Instance,
+                    Name = "\0",
+                    FontFace = Library.Font,
+                    TextColor3 = FromRGB(200, 200, 200),
+                    TextTransparency = 0.3,
+                    Text = Para.Content,
+                    TextSize = 13,
+                    Size = UDim2New(1, -10, 0, 0),
+                    Position = UDim2New(0, 5, 0, 23),
+                    BackgroundTransparency = 1,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    TextWrapped = true,
+                    BorderSizePixel = 0,
+                    ZIndex = 2,
+                })  Items["Body"]:AddToTheme({TextColor3 = "Text"})
+            end
+
+            function Para:Set(NewData)
+                if type(NewData) == "table" then
+                    if NewData.Name then Items["Header"].Instance.Text = tostring(NewData.Name) end
+                    if NewData.Content then Items["Body"].Instance.Text = tostring(NewData.Content) end
+                elseif type(NewData) == "string" then
+                    Items["Body"].Instance.Text = NewData
+                end
+            end
+
+            function Para:SetVisibility(Bool)
+                Items["Frame"].Instance.Visible = Bool
+            end
+
+            function Para:RefreshPosition(Bool)
+                if Bool then
+                    Items["Header"]:Tween(TweenInfo.new(1, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 3)})
+                    Items["Body"]:Tween(TweenInfo.new(1, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 23)})
+                else
+                    Items["Header"].Instance.Position = UDim2New(0, 5, 0, 3)
+                    Items["Body"].Instance.Position = UDim2New(0, 5, 0, 23)
+                end
+            end
+
+            Para.Items = Items
+            Para.Section.Elements[#Para.Section.Elements+1] = Para
+            return Para
+        end
+
         Library.Sections.Keybind = function(self, Data)
             Data = Data or { }
 
