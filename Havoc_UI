@@ -3896,9 +3896,15 @@ local Library do
             --]]
 
             function Window:Init()
-                for __, Value in Window.Pages do 
-                    if Value.Active then 
-                        for _, Value2 in Value.Sections do 
+                for __, Value in Window.Pages do
+                    if Value.Active then
+                        for _, Value2 in Value.Sections do
+                            for _, Element in Value2.Elements do
+                                Element:RefreshPosition(false)
+                            end
+                        end
+                        task.wait()
+                        for _, Value2 in Value.Sections do
                             task.spawn(function()
                                 Value2:TweenElements(true)
                             end)
@@ -4105,6 +4111,12 @@ local Library do
                 if Page.Active then
                     Items["Inactive"]:Tween(nil, {BackgroundTransparency = 0.25})
                     Items["Page"]:Tween(TweenInfo.new(0.15, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 0)})
+
+                    for Index, Value in Page.Sections do
+                        for _, Element in Value.Elements do
+                            Element:RefreshPosition(false)
+                        end
+                    end
 
                     for Index, Value in Page.Sections do
                         task.spawn(function()
