@@ -2733,7 +2733,11 @@ local Library do
                 Name = Data.Name or Data.name or "Window",
                 SubName = Data.SubName or Data.subname or "Fine-tuning for sure wins",
                 Logo = Data.Logo or Data.logo or "1l20959262762131",
-                
+                -- Opt-in: show the floating circular open/close icon on desktop too
+                -- (mobile always shows it). Games that don't set this keep the old
+                -- mobile-only behaviour.
+                FloatingButton = Data.FloatingButton or Data.floatingbutton or false,
+
                 Pages = { },
                 Items = { },
                 IsOpen = false,
@@ -2835,7 +2839,7 @@ local Library do
                     end
                 end)
 
-                if IsMobile then
+                if IsMobile or Window.FloatingButton then
                     Items["FloatingButton"] = Instances:Create("TextButton", {
                         Parent = Library.Holder.Instance,
                         Text = "",
@@ -3755,9 +3759,9 @@ local Library do
                 end)
             end
 
-            if IsMobile then 
+            if IsMobile or Window.FloatingButton then
                 Items["FloatingButton"]:Connect("InputBegan", function(Input)
-                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then 
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                         Window:SetOpen(not Window.IsOpen)
                     end
                 end)
