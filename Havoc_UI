@@ -6263,15 +6263,45 @@ local Library do
                     CornerRadius = UDimNew(0, 5)
                 })
                 
+                -- Search box (every dropdown, all projects): filters options by substring, case-insensitive
+                Items["DDSearch"] = Instances:Create("TextBox", {
+                    Parent = Items["OptionHolder"].Instance,
+                    Name = "\0",
+                    FontFace = Library.Font,
+                    PlaceholderText = "Search..",
+                    PlaceholderColor3 = FromRGB(120, 120, 128),
+                    Text = "",
+                    ClearTextOnFocus = false,
+                    TextColor3 = FromRGB(240, 240, 240),
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Position = UDim2New(0, 6, 0, 5),
+                    Size = UDim2New(1, -12, 0, 20),
+                    BorderSizePixel = 0,
+                    BackgroundColor3 = FromRGB(34, 32, 36)
+                })  Items["DDSearch"]:AddToTheme({TextColor3 = "Text", BackgroundColor3 = "Element"})
+
+                Instances:Create("UICorner", {
+                    Parent = Items["DDSearch"].Instance,
+                    Name = "\0",
+                    CornerRadius = UDimNew(0, 4)
+                })
+
+                Instances:Create("UIPadding", {
+                    Parent = Items["DDSearch"].Instance,
+                    Name = "\0",
+                    PaddingLeft = UDimNew(0, 6)
+                })
+
                 Items["Holder"] = Instances:Create("ScrollingFrame", {
                     Parent = Items["OptionHolder"].Instance,
                     Name = "\0",
                     Active = true,
                     AutomaticCanvasSize = Enum.AutomaticSize.Y,
                     ScrollBarThickness = 2,
-                    Size = UDim2New(1, -16, 1, -16),
+                    Size = UDim2New(1, -16, 1, -36),
                     BackgroundTransparency = 1,
-                    Position = UDim2New(0, 8, 0, 8),
+                    Position = UDim2New(0, 8, 0, 30),
                     BackgroundColor3 = FromRGB(255, 255, 255),
                     BorderColor3 = FromRGB(0, 0, 0),
                     BorderSizePixel = 0,
@@ -6392,6 +6422,9 @@ local Library do
 
                     Items["ArrowIcon"]:Tween(nil, {Rotation = 0, ImageColor3 = FromRGB(141, 141, 150)})
                     Items["Gradient"].Instance.Enabled = false
+                    if Items["DDSearch"] and Items["DDSearch"].Instance.Text ~= "" then
+                        Items["DDSearch"].Instance.Text = "" -- next open shows the full list
+                    end
                 end
 
                 local Descendants = Items["OptionHolder"].Instance:GetDescendants()
@@ -6669,14 +6702,27 @@ local Library do
             end
 
             function Dropdown:Refresh(List)
-                for Index, Value in Dropdown.Options do 
+                for Index, Value in Dropdown.Options do
                     Dropdown:Remove(Value.Name)
                 end
 
-                for Index, Value in List do 
+                for Index, Value in List do
                     Dropdown:Add(Value)
                 end
+                Dropdown:ApplySearch()
             end
+
+            function Dropdown:ApplySearch()
+                local q = string.lower(Items["DDSearch"].Instance.Text or "")
+                for _, OptionData in Dropdown.Options do
+                    local show = q == "" or string.find(string.lower(tostring(OptionData.Name)), q, 1, true) ~= nil
+                    pcall(function() OptionData.Button.Instance.Visible = show end)
+                end
+            end
+
+            Library:Connect(Items["DDSearch"].Instance:GetPropertyChangedSignal("Text"), function()
+                Dropdown:ApplySearch()
+            end)
 
             -- Wired to InputBegan (not MouseButton1Down/Click) — same reasoning
             -- as the Toggle handler above: some games hook or suppress the
