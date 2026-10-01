@@ -6120,6 +6120,10 @@ local Library do
                 Size = Data.Size or Data.size or 125,
                 OptionHolderSize = Data.OptionHolderSize or Data.optionholder or 125,
                 Multi = Data.Multi or Data.multi or false,
+                -- Ordered (multi only): the pick order is a priority - options show "1. Name" and the box
+                -- lists the picks numbered. Value keeps the click order (it always did); opt-in, so other
+                -- dropdowns look the same as before.
+                Ordered = Data.Ordered or Data.ordered or false,
 
                 Value = { },
                 Options = { },
@@ -6460,8 +6464,20 @@ local Library do
                 end)
             end
 
+            -- Ordered multi dropdown: number each picked option by its place in Value, and the box text too
+            function Dropdown:PaintOrder()
+                if not (Dropdown.Multi and Dropdown.Ordered) then return end
+                for Name, OptionData in Dropdown.Options do
+                    local Index = TableFind(Dropdown.Value, Name)
+                    OptionData.OptionText.Instance.Text = Index and (tostring(Index) .. ". " .. Name) or Name
+                end
+                local Parts = {}
+                for Index, Name in Dropdown.Value do Parts[#Parts + 1] = tostring(Index) .. ". " .. Name end
+                Items["Value"].Instance.Text = #Parts > 0 and TableConcat(Parts, ", ") or "..."
+            end
+
             function Dropdown:Set(Option)
-                if Dropdown.Multi then 
+                if Dropdown.Multi then
                     if type(Option) ~= "table" then 
                         return
                     end
@@ -6481,6 +6497,7 @@ local Library do
                     end
 
                     Items["Value"].Instance.Text = TableConcat(Option, ", ")
+                    Dropdown:PaintOrder()
                 else
                     if not Dropdown.Options[Option] then
                         return
@@ -6648,6 +6665,7 @@ local Library do
 
                         local TextFormat = #Dropdown.Value > 0 and TableConcat(Dropdown.Value, ", ") or "..."
                         Items["Value"].Instance.Text = TextFormat
+                        Dropdown:PaintOrder()
                     else
                         if OptionData.Selected then 
                             Dropdown.Value = OptionData.Name
