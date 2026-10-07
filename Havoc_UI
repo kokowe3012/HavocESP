@@ -3049,31 +3049,34 @@ local Library do
                     BorderColor3 = FromRGB(0, 0, 0),
                     Size = UDim2New(0, 11, 0, 11),
                     AnchorPoint = Vector2New(0.5, 0.5),
-                    Image = "rbxassetid://130510492706892",
+                    Image = "",
                     BackgroundTransparency = 1,
                     Position = UDim2New(0.5, 0, 0.5, 0),
                     ZIndex = 3,
                     BorderSizePixel = 0,
                     BackgroundColor3 = FromRGB(255, 255, 255)
-                })  Items["CloseIcon"]:AddToTheme({ImageColor3 = "Text"})        
+                })  Items["CloseIcon"]:AddToTheme({ImageColor3 = "Text"})
+                -- the top-right button minimises now (was X = unload): a "-" bar instead of the X image
+                Items["MinimizeBar"] = Instances:Create("Frame", {
+                    Parent = Items["CloseButton"].Instance,
+                    Name = "\0",
+                    AnchorPoint = Vector2New(0.5, 0.5),
+                    Position = UDim2New(0.5, 0, 0.5, 0),
+                    Size = UDim2New(0, 11, 0, 2),
+                    BackgroundTransparency = 0.3,
+                    BorderSizePixel = 0,
+                    ZIndex = 3,
+                    BackgroundColor3 = FromRGB(240, 240, 240)
+                })  Items["MinimizeBar"]:AddToTheme({BackgroundColor3 = "Text"})        
                 
-                -- The X button now does the SAME full teardown as the in-game
-                -- Delete-key / "Unload script" button (getgenv().__HAVOC_ESP_CLEANUP),
-                -- not just Library:Unload() — that only tore down the UI itself
-                -- and left SA/NR/ESP connections and hooks running in the
-                -- background with no way to reach them again. Falls back to the
-                -- plain Library:Unload() if the consumer script never set that up
-                -- (e.g. HAVOC_UI used standalone). InputBegan instead of
-                -- MouseButton1Down — see Toggle/Dropdown/Colorpicker for why.
+                -- Top-right button = minimise (2026-10-07; was X = full unload). InputBegan instead of
+                -- MouseButton1Down - see Toggle/Dropdown/Colorpicker for why.
                 Items["CloseButton"]:Connect("InputBegan", function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseButton1
                        or Input.UserInputType == Enum.UserInputType.Touch then
-                        local cleanup = getgenv and getgenv().__HAVOC_ESP_CLEANUP
-                        if cleanup then
-                            pcall(cleanup)
-                        else
-                            Library:Unload()
-                        end
+                        -- minimise, not unload (user 2026-10-07): the floating logo / menu key opens it
+                        -- again; unloading stays on each script's own Unload button
+                        if Window.SetOpen then Window:SetOpen(false) end
                     end
                 end)
 
