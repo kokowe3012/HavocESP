@@ -3763,9 +3763,24 @@ local Library do
             end
 
             if IsMobile or Window.FloatingButton then
+                -- toggle on release, and only when it was a tap: pressing to drag opened the window (user 2026-10-09)
                 Items["FloatingButton"]:Connect("InputBegan", function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                        Window:SetOpen(not Window.IsOpen)
+                        local Start = Vector2.new(Input.Position.X, Input.Position.Y)
+                        local Far = false
+                        local Moved = UserInputService.InputChanged:Connect(function(I2)
+                            if I2.UserInputType == Enum.UserInputType.MouseMovement or I2.UserInputType == Enum.UserInputType.Touch then
+                                if (Vector2.new(I2.Position.X, I2.Position.Y) - Start).Magnitude > 8 then Far = true end
+                            end
+                        end)
+                        local Ended
+                        Ended = Input.Changed:Connect(function()
+                            if Input.UserInputState == Enum.UserInputState.End then
+                                Ended:Disconnect()
+                                Moved:Disconnect()
+                                if not Far then Window:SetOpen(not Window.IsOpen) end
+                            end
+                        end)
                     end
                 end)
             end
