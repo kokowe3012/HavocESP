@@ -513,6 +513,15 @@ local Library do
         
             Library:Connect(UserInputService.InputChanged, function(Input)
                 if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
+                    -- a drag left on: the press began on the window and the window hid before the release (the
+                    -- minimise button), so the End never came and the window followed the mouse after it opened
+                    -- again (2026-10-10). Mouse up or window hidden = the drag is over
+                    -- HV_NoDrag: Window:Pill is flying the window in / out (its own tween must win)
+                    if Dragging and (not Gui.Visible or Gui:GetAttribute("HV_NoDrag") or (Input.UserInputType == Enum.UserInputType.MouseMovement
+                        and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1))) then
+                        Dragging = false
+                        if InputChanged then InputChanged:Disconnect() InputChanged = nil end
+                    end
                     if Dragging then
                         Set(Input)
                     end
@@ -4329,11 +4338,11 @@ local Library do
                     return B.AbsolutePosition + Vector2New(B.AbsoluteSize.X / 2, 14) - P
                 end
                 local function FlyPos(S)
-                    -- UIScale shrinks around the frame's top-left corner, so put that corner where the
-                    -- scaled frame's centre lands on the pill
+                    -- UIScale shrinks around the AnchorPoint (measured: the centre with AnchorPoint 0.5),
+                    -- so the scaled frame's centre = Position + Size * S * (0.5 - Anchor)
                     local C, Sz, A = PillCenter(), Main.AbsoluteSize / WScale.Scale, Main.AnchorPoint
-                    local X = C.X - Sz.X * S / 2 + Sz.X * A.X
-                    local Y = C.Y - Sz.Y * S / 2 + Sz.Y * A.Y
+                    local X = C.X - Sz.X * S * (0.5 - A.X)
+                    local Y = C.Y - Sz.Y * S * (0.5 - A.Y)
                     return UDim2New(0, X, 0, Y)
                 end
                 local function PillPop(Show)
@@ -4352,24 +4361,41 @@ local Library do
                 Pill.Pop = PillPop
 
                 local Orig = Window.SetOpen
+                local Busy = false
+                local Tiny = 0.03
                 function Window:SetOpen(Bool)
-                    if Debounce then return end
-                    local Speed = (Library.FadeSpeed or 0.25) + 0.1
+                    if Debounce or Busy then return end
+                    local Speed = 0.42
                     if Bool then
-                        PillPop(false)
+                        -- spit out: the pill swells, the window shoots out of it and overshoots a little
+                        if not Data.Always then PillPop(false) end
+                        Main:SetAttribute("HV_NoDrag", true)
+                        task.delay(Speed, function() if Window.IsOpen then Main:SetAttribute("HV_NoDrag", nil) end end)
                         if Home then
-                            WScale.Scale = 0.15
-                            Main.Position = FlyPos(0.15)
+                            WScale.Scale = Tiny
+                            Main.Position = FlyPos(Tiny)
                             TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
                             TS:Create(Main, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = Home }):Play()
                         end
                         Orig(Window, true)
                     else
+                        -- suck in: a small pull back (Back In), then the window rushes into the pill shrinking to a dot;
+                        -- it only fades out at the very end, and the pill gulps it
+                        Busy = true
+                        Main:SetAttribute("HV_NoDrag", true)
                         Home = Main.Position
-                        TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = 0.15 }):Play()
-                        TS:Create(Main, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = FlyPos(0.15) }):Play()
-                        Orig(Window, false)
-                        task.delay(Speed * 0.8, function() if Window.IsOpen == false then PillPop(true) end end)
+                        Window.IsOpen = false
+                        TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Back, Enum.EasingDirection.In), { Scale = Tiny }):Play()
+                        TS:Create(Main, TweenInfo.new(Speed, Enum.EasingStyle.Quint, Enum.EasingDirection.In), { Position = FlyPos(Tiny) }):Play()
+                        task.delay(Speed * 0.6, function()
+                            Busy = false
+                            Window.IsOpen = true
+                            Orig(Window, false)
+                        end)
+                        task.delay(Speed * 0.9, function()
+                            if Window.IsOpen ~= false then return end
+                            if not Data.Always then PillPop(true) end
+                        end)
                     end
                 end
 
