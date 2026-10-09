@@ -2961,6 +2961,262 @@ local Library do
             return Card
         end
 
+        -- Library:PickerWindow(Data) (2026-10-10, from Anime Zero's Evo / Craft window): a 600x530 dark window over the
+        -- hub with tabs, filter chips, a grid of picture cards (pick several), requirement bars for one card, a status
+        -- line and two buttons. Pops open / folds closed, the content slides in on a tab change, the header drags it,
+        -- and the hub under it does not move while the mouse is over it. The game owns the data and calls the setters.
+        -- Data: Title, Sub, Tabs = { {Key, Label}, ... }, Chips = { "All", "Ready", ... }, Parent,
+        --       OnTab(key), OnChip(key), OnCard(key), OnStart(), OnNow(), OnClose()
+        -- Picker: :Show() :Hide() :Toggle() .Visible  :SetHeader(title, sub) :SetCount(t)
+        --         :SetTab(key, shownKeys?) :SetChips(active, labels?) :SetCards({ {Key, Icon, Name, Sub, State, StateColor, Picked}, ... })
+        --         :SetReqTitle(t) :SetReqs({ {Icon, Name, Have, Need, Fallback}, ... }) :SetFooter(t)
+        --         :SetStart(text, on, visible) :SetNow(text, fullWidth) :SetCompact(on) (no requirement rows: taller grid)
+        --         :Destroy()  .Window .Gui
+        Library.PickerWindow = function(self, Data)
+            Data = Data or {}
+            local TS = game:GetService("TweenService")
+            local P = { Visible = false }
+            local C = { bg = FromRGB(17, 16, 23), white = FromRGB(245, 244, 250), muted = FromRGB(125, 122, 140), soft = FromRGB(200, 198, 214),
+                blue = FromRGB(84, 132, 255), ok = FromRGB(110, 231, 140), warn = FromRGB(250, 200, 90), miss = FromRGB(255, 120, 120), red = FromRGB(224, 49, 49) }
+            P.Colors = C
+            local function New(Class, Props, Parent)
+                local O = Instance.new(Class)
+                for K, V in Props do O[K] = V end
+                O.Parent = Parent
+                return O
+            end
+            local function Corner(O, R) New("UICorner", { CornerRadius = UDimNew(0, R) }, O) return O end
+            local function Stroke(O, Col, T, Th) return New("UIStroke", { Color = Col or FromRGB(255, 255, 255), Transparency = T or 0, Thickness = Th or 1,
+                ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, O) end
+            local function Text(Parent, T, Size, Col, Props)
+                local L = New("TextLabel", { BackgroundTransparency = 1, Text = T, TextSize = Size, TextColor3 = Col, Font = Enum.Font.Gotham,
+                    TextXAlignment = Enum.TextXAlignment.Left, RichText = true }, Parent)
+                for K, V in Props or {} do L[K] = V end
+                return L
+            end
+            local function Pill(B, On)
+                B.BackgroundColor3 = On and C.blue or FromRGB(255, 255, 255)
+                B.BackgroundTransparency = On and 0 or 0.95
+                B.TextColor3 = On and FromRGB(255, 255, 255) or C.muted
+            end
+
+            -- inside the hub's own ScreenGui, every element lifted above the hub's ZIndex range (Global behaviour)
+            local Z = 2000000
+            local Host = Data.Parent or Library.Holder.Instance
+            local Win = Corner(New("Frame", { Name = "\0", Size = UDim2New(0, 600, 0, 530), Position = UDim2New(0.5, 0, 0.5, 0), AnchorPoint = Vector2New(0.5, 0.5),
+                BackgroundColor3 = C.bg, BackgroundTransparency = 0, Visible = false, Active = true, ZIndex = Z }, Host), 14)
+            P.Window, P.Gui = Win, Host
+            local function Boost(O) if O:IsA("GuiObject") and O.ZIndex < Z then O.ZIndex += Z end end
+            Win.DescendantAdded:Connect(Boost)
+            Stroke(Win, nil, 0.9)
+            local Vs = workspace.CurrentCamera.ViewportSize
+            local Base = math.min(1, (Vs.X - 24) / 600, (Vs.Y - 24) / 530)
+            local Scale = New("UIScale", { Scale = 0 }, Win)
+
+            local function Divider(Y)
+                return New("Frame", { Size = UDim2New(1, -32, 0, 1), Position = UDim2New(0, 16, 0, Y), BackgroundColor3 = FromRGB(255, 255, 255),
+                    BackgroundTransparency = 0.92, BorderSizePixel = 0 }, Win)
+            end
+            -- header
+            local Head = New("Frame", { Size = UDim2New(1, 0, 0, 52), BackgroundTransparency = 1 }, Win)
+            local TitleL = Text(Head, Data.Title or "", 22, C.white, { Position = UDim2New(0, 16, 0, 8), Size = UDim2New(0, 90, 0, 24), Font = Enum.Font.GothamBold })
+            local SubL = Text(Head, Data.Sub or "", 11, C.muted, { Position = UDim2New(0, 16, 0, 32), Size = UDim2New(0, 300, 0, 14), Font = Enum.Font.GothamMedium })
+            local Count = Text(Head, "", 12, C.muted, { Position = UDim2New(1, -170, 0, 16), Size = UDim2New(0, 110, 0, 20), TextXAlignment = Enum.TextXAlignment.Right,
+                Font = Enum.Font.GothamMedium })
+            local X = Corner(New("TextButton", { Size = UDim2New(0, 30, 0, 30), Position = UDim2New(1, -46, 0, 11), BackgroundColor3 = FromRGB(255, 255, 255),
+                BackgroundTransparency = 0.94, Text = "X", TextColor3 = C.soft, TextSize = 13, Font = Enum.Font.GothamBold }, Head), 15)
+            local Tabs = {}
+            for I, T in Data.Tabs or {} do
+                local B = Corner(New("TextButton", { Size = UDim2New(0, 64, 0, 24), Position = UDim2New(0, 110 + (I - 1) * 70, 0, 9), Text = T[2] or T[1],
+                    TextSize = 12, Font = Enum.Font.GothamMedium, AutoButtonColor = false }, Head), 12)
+                Pill(B, false)
+                B.MouseButton1Click:Connect(function() if Data.OnTab then Data.OnTab(T[1]) end end)
+                Tabs[T[1]] = B
+            end
+            -- filter chips
+            local ChipRow = New("Frame", { Size = UDim2New(1, -32, 0, 26), Position = UDim2New(0, 16, 0, 56), BackgroundTransparency = 1 }, Win)
+            New("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDimNew(0, 6) }, ChipRow)
+            local Chips = {}
+            for I, K in Data.Chips or { "All" } do
+                local B = Corner(New("TextButton", { LayoutOrder = I, Size = UDim2New(0, 78, 0, 26), Text = K, TextSize = 12, Font = Enum.Font.GothamMedium,
+                    AutoButtonColor = false }, ChipRow), 13)
+                Pill(B, false)
+                B.MouseButton1Click:Connect(function() if Data.OnChip then Data.OnChip(K) end end)
+                Chips[K] = B
+            end
+            -- card grid (3 px padding: the scroll frame clips, a 2 px picked outline on its edge was cut)
+            local Grid = New("ScrollingFrame", { Size = UDim2New(1, -26, 0, 142), Position = UDim2New(0, 13, 0, 88), BackgroundTransparency = 1,
+                BorderSizePixel = 0, ScrollBarThickness = 4, CanvasSize = UDim2New(), AutomaticCanvasSize = Enum.AutomaticSize.Y }, Win)
+            New("UIPadding", { PaddingTop = UDimNew(0, 3), PaddingBottom = UDimNew(0, 3), PaddingLeft = UDimNew(0, 3), PaddingRight = UDimNew(0, 3) }, Grid)
+            New("UIGridLayout", { CellSize = UDim2New(0, 102, 0, 132), CellPadding = UDim2New(0, 8, 0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, Grid)
+            Divider(52)
+            local Mid = Divider(234)
+            Divider(458)
+            local ReqTitle = Text(Win, "", 13, C.white, { Font = Enum.Font.GothamBold, Position = UDim2New(0, 16, 0, 238), Size = UDim2New(1, -160, 0, 20),
+                TextTruncate = Enum.TextTruncate.AtEnd })
+            local Req = New("Frame", { Size = UDim2New(1, -32, 0, 196), Position = UDim2New(0, 16, 0, 260), BackgroundTransparency = 1, ClipsDescendants = true }, Win)
+            New("UIListLayout", { Padding = UDimNew(0, 4) }, Req)
+            local Footer = Text(Win, "", 11, C.muted, { Position = UDim2New(0, 16, 0, 462), Size = UDim2New(1, -32, 0, 16), TextTruncate = Enum.TextTruncate.AtEnd })
+            local Start = Corner(New("TextButton", { Size = UDim2New(0.5, -20, 0, 34), Position = UDim2New(0, 16, 0, 484), BackgroundColor3 = C.blue,
+                TextColor3 = FromRGB(255, 255, 255), TextSize = 13, Font = Enum.Font.GothamBold, Text = "Start" }, Win), 17)
+            local Now = Corner(New("TextButton", { Size = UDim2New(0.5, -20, 0, 34), Position = UDim2New(0.5, 4, 0, 484), BackgroundColor3 = FromRGB(0, 0, 0),
+                BackgroundTransparency = 0.35, TextColor3 = FromRGB(225, 223, 236), TextSize = 13, Font = Enum.Font.GothamBold, Text = "Now" }, Win), 17)
+            Stroke(Now, nil, 0.78)
+            P.StartButton, P.NowButton = Start, Now
+            Start.MouseButton1Click:Connect(function() if Data.OnStart then Data.OnStart() end end)
+            Now.MouseButton1Click:Connect(function() if Data.OnNow then Data.OnNow() end end)
+            for _, D in Win:GetDescendants() do Boost(D) end
+
+            -- open / close: pop in with Back easing, fold away on close
+            local Closing = false
+            function P:Show()
+                Closing = false
+                P.Visible = true
+                Win.Visible = true
+                Scale.Scale = math.min(Scale.Scale, Base * 0.6)
+                TS:Create(Scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = Base }):Play()
+            end
+            function P:Hide()
+                if not Win.Visible then return end
+                Closing = true
+                P.Visible = false
+                local T = TS:Create(Scale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.In), { Scale = 0 })
+                T.Completed:Connect(function() if Closing then Win.Visible = false Closing = false end end)
+                T:Play()
+                if Data.OnClose then task.spawn(Data.OnClose) end
+            end
+            function P:Toggle() if P.Visible then P:Hide() else P:Show() end end
+            X.MouseButton1Click:Connect(function() P:Hide() end)
+
+            function P:SetHeader(T, S) TitleL.Text = T or TitleL.Text SubL.Text = S or SubL.Text end
+            function P:SetCount(T) Count.Text = T end
+            local LastTab
+            function P:SetTab(Key, Shown)
+                for K, B in Tabs do
+                    Pill(B, K == Key)
+                    B.Visible = not Shown or table.find(Shown, K) ~= nil
+                end
+                -- a tab change: the content slides in from the right like the hub's pages
+                if LastTab and LastTab ~= Key then
+                    local Ti = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+                    for _, O in { Grid, Req, ReqTitle } do
+                        local To = O.Position
+                        O.Position = To + UDim2New(0, 40, 0, 0)
+                        TS:Create(O, Ti, { Position = To }):Play()
+                    end
+                end
+                LastTab = Key
+            end
+            function P:SetChips(Active, Labels)
+                for K, B in Chips do
+                    B.Text = Labels and Labels[K] or K
+                    Pill(B, K == Active)
+                end
+            end
+            function P:SetCards(List)
+                for _, Ch in Grid:GetChildren() do if Ch:IsA("GuiObject") then Ch:Destroy() end end
+                for I, It in List do
+                    local Picked = It.Picked
+                    local Card = Corner(New("TextButton", { BackgroundColor3 = Picked and C.blue or FromRGB(255, 255, 255), BackgroundTransparency = Picked and 0.85 or 0.95,
+                        Text = "", LayoutOrder = I, AutoButtonColor = false }, Grid), 12)
+                    Stroke(Card, Picked and C.blue or FromRGB(255, 255, 255), Picked and 0 or 0.9, Picked and 2 or 1)
+                    Corner(New("ImageLabel", { Size = UDim2New(0, 62, 0, 62), Position = UDim2New(0.5, -31, 0, 8), BackgroundColor3 = FromRGB(0, 0, 0),
+                        BackgroundTransparency = 0.5, Image = It.Icon or "", ScaleType = Enum.ScaleType.Fit }, Card), 31)
+                    Text(Card, tostring(It.Name or ""), 12, C.white, { Font = Enum.Font.GothamBold, Position = UDim2New(0, 4, 0, 76), Size = UDim2New(1, -8, 0, 16),
+                        TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd })
+                    Text(Card, tostring(It.Sub or ""), 11, C.muted, { Position = UDim2New(0, 4, 0, 92), Size = UDim2New(1, -8, 0, 14), TextXAlignment = Enum.TextXAlignment.Center })
+                    Text(Card, tostring(It.State or ""), 11, It.StateColor or C.muted, { Position = UDim2New(0, 4, 0, 108), Size = UDim2New(1, -8, 0, 14),
+                        TextXAlignment = Enum.TextXAlignment.Center })
+                    if Picked then
+                        Corner(Text(Card, "✓", 12, FromRGB(255, 255, 255), { Size = UDim2New(0, 20, 0, 20), Position = UDim2New(1, -24, 0, 4), BackgroundTransparency = 0,
+                            BackgroundColor3 = C.blue, TextXAlignment = Enum.TextXAlignment.Center }), 10)
+                    end
+                    Card.MouseButton1Click:Connect(function() if Data.OnCard then Data.OnCard(It.Key) end end)
+                end
+            end
+            function P:SetReqTitle(T) ReqTitle.Text = T end
+            function P:SetReqs(List)
+                for _, Ch in Req:GetChildren() do if Ch:IsA("GuiObject") then Ch:Destroy() end end
+                for _, R in List do
+                    local Row = New("Frame", { Size = UDim2New(1, 0, 0, 28), BackgroundTransparency = 1 }, Req)
+                    local Ic = Corner(New("ImageLabel", { Size = UDim2New(0, 24, 0, 24), Position = UDim2New(0, 0, 0, 2), BackgroundColor3 = FromRGB(255, 255, 255),
+                        BackgroundTransparency = 0.94, Image = R.Icon or "" }, Row), 12)
+                    if (R.Icon or "") == "" then Text(Ic, R.Fallback or "?", 12, C.white, { Size = UDim2New(1, 0, 1, 0), TextXAlignment = Enum.TextXAlignment.Center }) end
+                    Text(Row, tostring(R.Name or ""), 12, C.soft, { Position = UDim2New(0, 34, 0, 0), Size = UDim2New(0, 150, 0, 28), TextTruncate = Enum.TextTruncate.AtEnd })
+                    local Have, Need = tonumber(R.Have) or 0, tonumber(R.Need) or 0
+                    local Frac = math.clamp(Have / math.max(Need, 1), 0, 1)
+                    local Bar = Corner(New("Frame", { Size = UDim2New(1, -290, 0, 6), Position = UDim2New(0, 190, 0, 11), BackgroundColor3 = FromRGB(255, 255, 255),
+                        BackgroundTransparency = 0.92 }, Row), 3)
+                    Corner(New("Frame", { Size = UDim2New(Frac, 0, 1, 0), BackgroundColor3 = Frac >= 1 and C.ok or (Frac >= 0.5 and C.warn or C.miss) }, Bar), 3)
+                    Text(Row, ("%d/%d"):format(Have, Need), 13, Frac >= 1 and C.ok or C.miss, { Position = UDim2New(1, -92, 0, 0), Size = UDim2New(0, 92, 0, 28),
+                        Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Right })
+                end
+            end
+            function P:SetFooter(T) Footer.Text = T end
+            function P:SetStart(T, On, Shown)
+                Start.Text = T
+                Start.BackgroundColor3 = On and C.red or C.blue
+                if Shown ~= nil then Start.Visible = Shown end
+            end
+            function P:SetNow(T, Full)
+                Now.Text = T
+                Now.Size = Full and UDim2New(1, -32, 0, 34) or UDim2New(0.5, -20, 0, 34)
+                Now.Position = Full and UDim2New(0, 16, 0, 484) or UDim2New(0.5, 4, 0, 484)
+            end
+            -- no requirement rows: the grid takes their room, the requirement title becomes one info line under it
+            function P:SetCompact(On)
+                Grid.Size = UDim2New(1, -26, 0, On and 336 or 142)
+                ReqTitle.Position = UDim2New(0, 16, 0, On and 432 or 238)
+                Req.Visible, Mid.Visible = not On, not On
+            end
+
+            -- drag by the header
+            do
+                local Dragging, From, Pos
+                Head.InputBegan:Connect(function(I)
+                    if I.UserInputType == Enum.UserInputType.MouseButton1 or I.UserInputType == Enum.UserInputType.Touch then
+                        Dragging, From, Pos = true, I.Position, Win.Position
+                        I.Changed:Connect(function() if I.UserInputState == Enum.UserInputState.End then Dragging = false end end)
+                    end
+                end)
+                Library:Connect(UserInputService.InputChanged, function(I)
+                    if Dragging and (I.UserInputType == Enum.UserInputType.MouseMovement or I.UserInputType == Enum.UserInputType.Touch) then
+                        local D = I.Position - From
+                        Win.Position = UDim2New(Pos.X.Scale, Pos.X.Offset + D.X, Pos.Y.Scale, Pos.Y.Offset + D.Y)
+                    end
+                end)
+            end
+            -- the hub's window drag starts from its own InputBegan, which fires through this window too: while the mouse
+            -- is over it every other InputBegan handler in the host is disabled, enabled again when it leaves
+            local Muted = {}
+            local function Mute(On)
+                if On == (#Muted > 0) then return end
+                if not On then
+                    for _, Cn in Muted do pcall(function() Cn:Enable() end) end
+                    Muted = {}
+                    return
+                end
+                if not getconnections then return end
+                for _, D in Host:GetDescendants() do
+                    if D:IsA("GuiObject") and D ~= Win and not D:IsDescendantOf(Win) then
+                        local Ok, L = pcall(getconnections, D.InputBegan)
+                        for _, Cn in Ok and L or {} do
+                            if pcall(function() Cn:Disable() end) then TableInsert(Muted, Cn) end
+                        end
+                    end
+                end
+            end
+            P.Mute = Mute
+            Library:Connect(UserInputService.InputChanged, function(I)
+                if I.UserInputType ~= Enum.UserInputType.MouseMovement and I.UserInputType ~= Enum.UserInputType.Touch then return end
+                local Pt, A, S = I.Position, Win.AbsolutePosition, Win.AbsoluteSize
+                Mute(Win.Visible and Pt.X >= A.X and Pt.X <= A.X + S.X and Pt.Y >= A.Y and Pt.Y <= A.Y + S.Y)
+            end)
+            Win:GetPropertyChangedSignal("Visible"):Connect(function() if not Win.Visible then Mute(false) end end)
+            function P:Destroy() Mute(false) Win:Destroy() end
+            return P
+        end
+
         Library.Window = function(self, Data)
             Data = Data or { }
 
