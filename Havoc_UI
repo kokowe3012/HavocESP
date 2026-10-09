@@ -860,6 +860,7 @@ local Library do
         if self.Holder then
             self.Holder:Clean()
         end
+        for _, G in self._Cards or {} do pcall(function() G:Destroy() end) end
 
         Library = nil
         getgenv().Library = nil
@@ -2726,6 +2727,240 @@ local Library do
             end)
         end
 
+        -- Library:StatsCard(Data) (2026-10-10, from Anime Zero's run stats): a small dark card (title, big time,
+        -- label / value rows, an item grid, a BLACK SCREEN button) that can be dragged, and a black screen that
+        -- fades in, folds the card away and shows the same numbers big with a Back button (3D rendering off,
+        -- free mouse cursor, the window's pill hidden). The game fills the texts; the card only lays them out.
+        -- Data: Rows = { {Key, Label}, ... }, Position (UDim2), Width (300), Columns (3, item grid), BigColumns (4),
+        --       Subtitle ("AUTOPILOT RUNNING"), Empty ("No items yet"), Parent, OnBlack = function(on) end
+        -- Card: :SetTitle(t) :SetTime(t) :SetRow(key, richText) :SetItems({ {Icon, Name, Add, Total}, ... })
+        --       :SetBlack(on, instant) :SetVisible(on) :Destroy()  .Gui .Box .Rows .BigRows .Items .BigItems
+        --       .Empty .Extra (an empty panel on the black screen, filled by the game) .BlackOn
+        Library.StatsCard = function(self, Data)
+            Data = Data or {}
+            local TS = game:GetService("TweenService")
+            local WHITE, MUTED, GREEN = FromRGB(245, 244, 250), FromRGB(125, 122, 140), FromRGB(110, 231, 140)
+            local function New(Class, Props, Parent)
+                local O = Instance.new(Class)
+                for K, V in Props do O[K] = V end
+                O.Parent = Parent
+                return O
+            end
+            local function Corner(O, R) New("UICorner", { CornerRadius = UDimNew(0, R) }, O) return O end
+            local function Stroke(O, T) return New("UIStroke", { Color = FromRGB(255, 255, 255), Transparency = T, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, O) end
+            local function Text(Parent, Size, Col, Props)
+                local L = New("TextLabel", { BackgroundTransparency = 1, Text = "", TextSize = Size, TextColor3 = Col, Font = Enum.Font.Gotham,
+                    TextXAlignment = Enum.TextXAlignment.Left, RichText = true }, Parent)
+                for K, V in Props or {} do L[K] = V end
+                return L
+            end
+            local function Line(Parent, Order, W, T)
+                return New("Frame", { LayoutOrder = Order, Size = UDim2New(W, 0, 0, 1), BackgroundColor3 = FromRGB(255, 255, 255),
+                    BackgroundTransparency = T, BorderSizePixel = 0 }, Parent)
+            end
+            local function Tw(O, T, Props, Style, Dir)
+                local X = TS:Create(O, TweenInfo.new(T, Style or Enum.EasingStyle.Quad, Dir or Enum.EasingDirection.Out), Props)
+                X:Play()
+                return X
+            end
+
+            local Card = { Rows = {}, BigRows = {}, BlackOn = false }
+            local Gui = New("ScreenGui", { Name = "\0", ResetOnSpawn = false, DisplayOrder = 2147483646, IgnoreGuiInset = true,
+                ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, Data.Parent or Library.Holder.Instance.Parent)
+            Card.Gui = Gui
+            self._Cards = self._Cards or {}
+            TableInsert(self._Cards, Gui)
+            local Vs = workspace.CurrentCamera.ViewportSize
+
+            -- the card
+            local Box = Corner(New("Frame", { AnchorPoint = Vector2New(0, 0.5), Position = Data.Position or UDim2New(0, 12, 0.57, 0),
+                Size = UDim2New(0, Data.Width or 300, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundColor3 = FromRGB(17, 16, 23),
+                BackgroundTransparency = 0.18, Active = true }, Gui), 12)
+            Card.Box = Box
+            Stroke(Box, 0.9)
+            New("UIPadding", { PaddingTop = UDimNew(0, 12), PaddingBottom = UDimNew(0, 12), PaddingLeft = UDimNew(0, 14), PaddingRight = UDimNew(0, 14) }, Box)
+            New("UIListLayout", { Padding = UDimNew(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, Box)
+            Card.Title = Text(Box, 11, FromRGB(150, 146, 170), { LayoutOrder = 1, Size = UDim2New(1, 0, 0, 14), Font = Enum.Font.GothamMedium,
+                TextTruncate = Enum.TextTruncate.AtEnd })
+            Card.Time = Text(Box, 26, WHITE, { LayoutOrder = 2, Size = UDim2New(1, 0, 0, 30), Font = Enum.Font.GothamBold })
+            Line(Box, 3, 1, 0.92)
+            local Rows = Data.Rows or {}
+            for I, R in Rows do
+                local Row = New("Frame", { LayoutOrder = 3 + I, Size = UDim2New(1, 0, 0, 20), BackgroundTransparency = 1 }, Box)
+                Text(Row, 12, MUTED, { Size = UDim2New(0.3, 0, 1, 0), Text = R[2] or R[1] })
+                Card.Rows[R[1]] = Text(Row, 13, FromRGB(240, 239, 246), { Position = UDim2New(0.3, 0, 0, 0), Size = UDim2New(0.7, 0, 1, 0),
+                    TextXAlignment = Enum.TextXAlignment.Right, Font = Enum.Font.GothamBold, Text = "0" })
+            end
+            Line(Box, 50, 1, 0.92)
+            Card.Items = New("Frame", { LayoutOrder = 51, Size = UDim2New(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, Box)
+            New("UIGridLayout", { CellSize = UDim2New(1 / (Data.Columns or 3), -6, 0, 36), CellPadding = UDim2New(0, 9, 0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, Card.Items)
+            Card.Empty = Text(Box, 11, MUTED, { LayoutOrder = 52, Size = UDim2New(1, 0, 0, 14), Text = Data.Empty or "No items yet" })
+            Card.BlackButton = Corner(New("TextButton", { LayoutOrder = 60, Size = UDim2New(1, 0, 0, 34), BackgroundColor3 = FromRGB(0, 0, 0),
+                BackgroundTransparency = 0.35, Text = "BLACK SCREEN", TextSize = 13, Font = Enum.Font.GothamBold, TextColor3 = FromRGB(225, 223, 236) }, Box), 17)
+            Stroke(Card.BlackButton, 0.78)
+            local Scale = New("UIScale", { Scale = math.clamp((Vs.X - 24) / 900, 0.7, 1) }, Box)
+            local BaseScale = Scale.Scale
+            Card.Scale = Scale
+
+            -- the black screen
+            local Black = New("Frame", { Size = UDim2New(1, 0, 1, 0), BackgroundColor3 = FromRGB(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0,
+                ZIndex = 5, Visible = false, Active = true }, Gui)
+            Card.Black = Black
+            local Full = New("CanvasGroup", { AnchorPoint = Vector2New(0.5, 0.5), Position = UDim2New(0.5, 0, 0.5, 0), Size = UDim2New(0, 740, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, GroupTransparency = 1, ZIndex = 6 }, Black)
+            New("UIListLayout", { Padding = UDimNew(0, 14), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }, Full)
+            New("UIScale", { Scale = math.clamp((Vs.X - 24) / 800, 0.5, 1) }, Full)
+            New("UIPadding", { PaddingTop = UDimNew(0, 4), PaddingBottom = UDimNew(0, 6) }, Full)
+            local function Center(Order, Size, Col, Font, H)
+                return Text(Full, Size, Col, { LayoutOrder = Order, Size = UDim2New(1, 0, 0, H or (Size + 6)), TextXAlignment = Enum.TextXAlignment.Center,
+                    Font = Font or Enum.Font.GothamMedium })
+            end
+            Card.BigTitle = Center(1, 14, MUTED)
+            Card.BigTime = Center(2, 64, WHITE, Enum.Font.GothamBold, 72)
+            Center(3, 11, FromRGB(120, 116, 140)).Text = Data.Subtitle or "AUTOPILOT RUNNING"
+            Line(Full, 4, 0.5, 0.93)
+            local Grid = New("Frame", { LayoutOrder = 5, Size = UDim2New(1, 0, 0, 64), BackgroundTransparency = 1 }, Full)
+            New("UIGridLayout", { CellSize = UDim2New(1 / math.max(#Rows, 1), -6, 1, 0), CellPadding = UDim2New(0, 8, 0, 0),
+                HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }, Grid)
+            for I, R in Rows do
+                local Cell = New("Frame", { LayoutOrder = I, BackgroundTransparency = 1 }, Grid)
+                Card.BigRows[R[1]] = Text(Cell, 20, WHITE, { Size = UDim2New(1, 0, 0, 42), TextXAlignment = Enum.TextXAlignment.Center,
+                    Font = Enum.Font.GothamBold, TextWrapped = true, Text = "0" })
+                Text(Cell, 12, MUTED, { Position = UDim2New(0, 0, 0, 46), Size = UDim2New(1, 0, 0, 16), TextXAlignment = Enum.TextXAlignment.Center, Text = R[2] or R[1] })
+            end
+            Card.BigItems = New("Frame", { LayoutOrder = 6, Size = UDim2New(0, 720, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, Full)
+            New("UIGridLayout", { CellSize = UDim2New(1 / (Data.BigColumns or 4), -12, 0, 36), CellPadding = UDim2New(0, 16, 0, 10),
+                HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }, Card.BigItems)
+            Card.Extra = Corner(New("Frame", { LayoutOrder = 7, Size = UDim2New(0.86, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundColor3 = FromRGB(255, 255, 255), BackgroundTransparency = 0.95, Visible = false }, Full), 12)
+            local Back = Corner(New("TextButton", { LayoutOrder = 9, Size = UDim2New(0, 150, 0, 36), BackgroundTransparency = 1, Text = "Back",
+                TextSize = 13, Font = Enum.Font.GothamMedium, TextColor3 = FromRGB(200, 198, 214), AutoButtonColor = false }, Full), 18)
+            Stroke(Back, 0.8)
+            Card.BackButton = Back
+
+            local function Set3d(On)
+                pcall(function() RunService:Set3dRenderingEnabled(On) end)
+                -- black = a free mouse cursor: games lock / hide it every frame, so it is unlocked every frame
+                pcall(function() RunService:UnbindFromRenderStep("HV_BlackCursor") end)
+                if not On then
+                    RunService:BindToRenderStep("HV_BlackCursor", Enum.RenderPriority.Last.Value, function()
+                        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+                        UserInputService.MouseIconEnabled = true
+                    end)
+                end
+            end
+            local function PillShow(On)
+                local W = Library and Library._Window
+                local P = W and W._Pill
+                if not P then return end
+                if not On then P.Instance.Visible = false
+                elseif P.Always or W.IsOpen == false then P.Pop(true) end
+            end
+            local Anim = 0
+            function Card:SetBlack(On, Instant)
+                On = On == true
+                if Card.BlackOn == On then return end
+                Card.BlackOn = On
+                Anim += 1
+                local My = Anim
+                if Data.OnBlack then task.spawn(Data.OnBlack, On) end
+                if Instant then
+                    Set3d(not On)
+                    PillShow(not On)
+                    Black.Visible, Black.BackgroundTransparency, Full.GroupTransparency = On, On and 0 or 1, On and 0 or 1
+                    Box.Visible, Scale.Scale = not On, BaseScale
+                    return
+                end
+                if On then
+                    Black.Visible = true
+                    PillShow(false)
+                    -- fold the card away, fade the screen to black, then bring the big numbers in
+                    Tw(Scale, 0.35, { Scale = 0 }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+                    Tw(Black, 0.6, { BackgroundTransparency = 0 })
+                    task.delay(0.35, function()
+                        if Anim ~= My then return end
+                        Box.Visible = false
+                        Tw(Full, 0.45, { GroupTransparency = 0 })
+                    end)
+                    task.delay(0.6, function() if Anim == My then Set3d(false) end end)
+                else
+                    Set3d(true)
+                    PillShow(true)
+                    Tw(Full, 0.25, { GroupTransparency = 1 })
+                    Tw(Black, 0.5, { BackgroundTransparency = 1 })
+                    Box.Visible = true
+                    Scale.Scale = 0
+                    task.delay(0.15, function()
+                        if Anim == My then Tw(Scale, 0.4, { Scale = BaseScale }, Enum.EasingStyle.Back, Enum.EasingDirection.Out) end
+                    end)
+                    task.delay(0.5, function() if Anim == My then Black.Visible = false end end)
+                end
+            end
+            Card.BlackButton.MouseButton1Click:Connect(function() Card:SetBlack(true) end)
+            Back.MouseButton1Click:Connect(function() Card:SetBlack(false) end)
+
+            function Card:SetTitle(T) Card.Title.Text = T Card.BigTitle.Text = T end
+            function Card:SetTime(T) Card.Time.Text = T Card.BigTime.Text = T end
+            -- the big copy puts what follows two spaces on its own line
+            function Card:SetRow(Key, T)
+                if Card.Rows[Key] then Card.Rows[Key].Text = T end
+                if Card.BigRows[Key] then Card.BigRows[Key].Text = (tostring(T):gsub("  ", "<br/>", 1)) end
+            end
+            function Card:SetItems(List)
+                for _, Holder in { Card.Items, Card.BigItems } do
+                    for _, C in Holder:GetChildren() do if C:IsA("GuiObject") then C:Destroy() end end
+                    local Big = Holder == Card.BigItems
+                    for I, It in List do
+                        local Chip = New("Frame", { LayoutOrder = I, BackgroundTransparency = 1 }, Holder)
+                        local S = Big and 28 or 24
+                        New("ImageLabel", { Size = UDim2New(0, S, 0, S), Position = UDim2New(0, 0, 0.5, -S / 2), BackgroundTransparency = 1, Image = It.Icon or "" }, Chip)
+                        local Add = "+" .. tostring(It.Add or 0)
+                        local Total = It.Total and ('<font color="#7D7A8C" size="11">Total %s</font>'):format(tostring(It.Total)) or ""
+                        if Big then
+                            Text(Chip, 12, FromRGB(220, 218, 232), { Position = UDim2New(0, 34, 0, 1), Size = UDim2New(1, -34, 0, 16), Text = tostring(It.Name or ""),
+                                TextTruncate = Enum.TextTruncate.AtEnd })
+                            Text(Chip, 12, GREEN, { Position = UDim2New(0, 34, 0, 18), Size = UDim2New(1, -34, 0, 16), Font = Enum.Font.GothamBold, Text = Add .. "  " .. Total })
+                        else
+                            Text(Chip, 13, GREEN, { Position = UDim2New(0, 28, 0, 1), Size = UDim2New(1, -28, 0, 16), Font = Enum.Font.GothamBold, Text = Add,
+                                TextTruncate = Enum.TextTruncate.AtEnd })
+                            Text(Chip, 11, MUTED, { Position = UDim2New(0, 28, 0, 18), Size = UDim2New(1, -28, 0, 16), Text = Total, TextTruncate = Enum.TextTruncate.AtEnd })
+                        end
+                    end
+                end
+                Card.Empty.Visible = #List == 0
+            end
+            function Card:SetVisible(On)
+                Gui.Enabled = On
+                if not On and Card.BlackOn then Card:SetBlack(false, true) end
+            end
+            function Card:Destroy()
+                if Card.BlackOn then Card:SetBlack(false, true) end
+                Gui:Destroy()
+            end
+
+            -- drag the card anywhere; measured from the first move (the press and the moves can report different
+            -- coordinate spaces with the gui inset)
+            Box.InputBegan:Connect(function(Input)
+                if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then return end
+                local Start, From
+                local Size = Gui.AbsoluteSize
+                local Move = UserInputService.InputChanged:Connect(function(M)
+                    if M.UserInputType == Enum.UserInputType.MouseMovement or M.UserInputType == Enum.UserInputType.Touch then
+                        if not Start then Start, From = M.Position, Box.AbsolutePosition - Gui.AbsolutePosition end
+                        local D = M.Position - Start
+                        Box.AnchorPoint = Vector2New(0, 0)
+                        Box.Position = UDim2New(0, math.clamp(From.X + D.X, 0, Size.X - Box.AbsoluteSize.X), 0, math.clamp(From.Y + D.Y, 0, Size.Y - Box.AbsoluteSize.Y))
+                        Card.Pos = Box.Position
+                    end
+                end)
+                local Done
+                Done = Input.Changed:Connect(function()
+                    if Input.UserInputState == Enum.UserInputState.End then Move:Disconnect() Done:Disconnect() end
+                end)
+            end)
+            return Card
+        end
+
         Library.Window = function(self, Data)
             Data = Data or { }
 
@@ -3890,6 +4125,7 @@ local Library do
                     WScale.Scale = 1
                     B:Destroy()
                 end
+                Pill.Always = Data.Always
                 Window._Pill = Pill
                 if Window.IsOpen == false or Data.Always then PillPop(true) end
                 return Pill
