@@ -3757,9 +3757,142 @@ local Library do
                 end
                 
                 NewTween.Tween.Completed:Connect(function()
-                    Debounce = false 
+                    Debounce = false
                     Items["MainFrame"].Instance.Visible = Window.IsOpen
                 end)
+            end
+
+            -- Window:Pill(Data) (opt-in, 2026-10-10 Anime Zero): the minimised window becomes a fixed pill
+            -- (logo + Text + green online dot with a pulse ring) instead of the round draggable icon. Minimise =
+            -- the window shrinks and flies into the pill, then the pill pops in; a tap = the pill pops out and the
+            -- window grows back out of it. Data: Text, Position (UDim2), Logo, Dot (Color3 or false), Parent,
+            -- Always (true = the pill stays on screen while the window is open too and a tap toggles it).
+            -- Returns Pill: .Instance (move it yourself if you want), :SetText(t), :Destroy()
+            function Window:Pill(Data)
+                Data = Data or {}
+                if Window._Pill then return Window._Pill end
+                local TS = game:GetService("TweenService")
+                local Main = Items["MainFrame"].Instance
+                local Pill = {}
+                local B = Instance.new("TextButton")
+                B.Name = "\0"
+                B.Text, B.AutoButtonColor = "", false
+                B.AnchorPoint, B.Position = Vector2New(0.5, 0), Data.Position or UDim2New(0.5, 0, 0, 6)
+                B.Size, B.AutomaticSize = UDim2New(0, 0, 0, 28), Enum.AutomaticSize.X
+                B.BackgroundColor3, B.BackgroundTransparency, B.BorderSizePixel = FromRGB(17, 16, 23), 0.1, 0
+                B.ZIndex = 127
+                Instance.new("UICorner", B).CornerRadius = UDimNew(1, 0)
+                local St = Instance.new("UIStroke", B)
+                St.Color, St.Transparency, St.ApplyStrokeMode = FromRGB(255, 255, 255), 0.88, Enum.ApplyStrokeMode.Border
+                local Pad = Instance.new("UIPadding", B)
+                Pad.PaddingLeft, Pad.PaddingRight = UDimNew(0, 6), UDimNew(0, 12)
+                local Lay = Instance.new("UIListLayout", B)
+                Lay.FillDirection, Lay.VerticalAlignment, Lay.Padding = Enum.FillDirection.Horizontal, Enum.VerticalAlignment.Center, UDimNew(0, 7)
+                Lay.SortOrder = Enum.SortOrder.LayoutOrder
+                local Logo = Instance.new("ImageLabel", B)
+                Logo.LayoutOrder, Logo.Size, Logo.BackgroundTransparency, Logo.ZIndex = 1, UDim2New(0, 20, 0, 20), 1, 128
+                Logo.Image = "rbxassetid://" .. tostring(Data.Logo or Window.Logo)
+                local Txt = Instance.new("TextLabel", B)
+                Txt.LayoutOrder, Txt.BackgroundTransparency, Txt.ZIndex = 2, 1, 128
+                Txt.AutomaticSize, Txt.Size = Enum.AutomaticSize.X, UDim2New(0, 0, 0, 28)
+                Txt.Font, Txt.TextSize, Txt.TextColor3 = Enum.Font.GothamBold, 13, FromRGB(245, 244, 250)
+                Txt.Text = Data.Text or Window.Name or "Terdsak Hub"
+                if Data.Dot ~= false then
+                    local Col = typeof(Data.Dot) == "Color3" and Data.Dot or FromRGB(64, 220, 120)
+                    local Box = Instance.new("Frame", B)
+                    Box.LayoutOrder, Box.Size, Box.BackgroundTransparency = 3, UDim2New(0, 10, 0, 10), 1
+                    local function Circle(z)
+                        local F = Instance.new("Frame", Box)
+                        F.AnchorPoint, F.Position, F.Size = Vector2New(0.5, 0.5), UDim2New(0.5, 0, 0.5, 0), UDim2New(0, 8, 0, 8)
+                        F.BackgroundColor3, F.BorderSizePixel, F.ZIndex = Col, 0, z
+                        Instance.new("UICorner", F).CornerRadius = UDimNew(1, 0)
+                        return F
+                    end
+                    local Ring = Circle(128)
+                    Ring.BackgroundTransparency = 0.4
+                    Circle(129)
+                    TS:Create(Ring, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1),
+                        { Size = UDim2New(0, 24, 0, 24), BackgroundTransparency = 1 }):Play()
+                end
+                local PScale = Instance.new("UIScale", B)
+                PScale.Scale = 0
+                B.Visible = false
+                B.Parent = Data.Parent or Main.Parent
+                Pill.Instance = B
+                function Pill:SetText(T) Txt.Text = T end
+
+                -- the round icon is never shown while a pill is used
+                local Fb = Items["FloatingButton"] and Items["FloatingButton"].Instance
+                if Fb then
+                    Fb.Visible = false
+                    Fb:GetPropertyChangedSignal("Visible"):Connect(function() if Fb.Visible and Window._Pill then Fb.Visible = false end end)
+                end
+
+                -- the window flies to / from the pill: a UIScale on MainFrame + its position, restored after
+                local WScale = Main:FindFirstChildOfClass("UIScale") or Instance.new("UIScale", Main)
+                local Home
+                local Anim = 0
+                local function PillCenter()
+                    -- the pill's centre in MainFrame's parent space (the pill may be hidden: use its layout box)
+                    local P = Main.Parent and Main.Parent.AbsolutePosition or Vector2New(0, 0)
+                    return B.AbsolutePosition + Vector2New(B.AbsoluteSize.X / 2, 14) - P
+                end
+                local function FlyPos(S)
+                    -- UIScale shrinks around the frame's top-left corner, so put that corner where the
+                    -- scaled frame's centre lands on the pill
+                    local C, Sz, A = PillCenter(), Main.AbsoluteSize / WScale.Scale, Main.AnchorPoint
+                    local X = C.X - Sz.X * S / 2 + Sz.X * A.X
+                    local Y = C.Y - Sz.Y * S / 2 + Sz.Y * A.Y
+                    return UDim2New(0, X, 0, Y)
+                end
+                local function PillPop(Show)
+                    if Data.Always then Show = true end
+                    Anim += 1
+                    local My = Anim
+                    if Show then
+                        B.Visible = true
+                        TS:Create(PScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+                    else
+                        local T = TS:Create(PScale, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0 })
+                        T.Completed:Connect(function() if Anim == My then B.Visible = false end end)
+                        T:Play()
+                    end
+                end
+                Pill.Pop = PillPop
+
+                local Orig = Window.SetOpen
+                function Window:SetOpen(Bool)
+                    if Debounce then return end
+                    local Speed = (Library.FadeSpeed or 0.25) + 0.1
+                    if Bool then
+                        PillPop(false)
+                        if Home then
+                            WScale.Scale = 0.15
+                            Main.Position = FlyPos(0.15)
+                            TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+                            TS:Create(Main, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = Home }):Play()
+                        end
+                        Orig(Window, true)
+                    else
+                        Home = Main.Position
+                        TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = 0.15 }):Play()
+                        TS:Create(Main, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = FlyPos(0.15) }):Play()
+                        Orig(Window, false)
+                        task.delay(Speed * 0.8, function() if Window.IsOpen == false then PillPop(true) end end)
+                    end
+                end
+
+                B.MouseButton1Click:Connect(function() Window:SetOpen(Data.Always and not Window.IsOpen or not Data.Always) end)
+                function Pill:Destroy()
+                    Window.SetOpen = Orig
+                    Window._Pill = nil
+                    if Home and not Window.IsOpen then Main.Position = Home end
+                    WScale.Scale = 1
+                    B:Destroy()
+                end
+                Window._Pill = Pill
+                if Window.IsOpen == false or Data.Always then PillPop(true) end
+                return Pill
             end
 
             if IsMobile or Window.FloatingButton then
