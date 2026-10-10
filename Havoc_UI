@@ -3258,14 +3258,21 @@ local Library do
                     BackgroundColor3 = FromRGB(27, 25, 29)
                 })  Items["MainFrame"]:AddToTheme({BackgroundColor3 = "Background"})
 
+                -- window scale per device (2026-10-10: phones got the PC size and ran off the screen). PC = 1,
+                -- phone = fits with room to spare (~70% of the width, 65% of the height); the player's own pick from
+                -- Settings > UI Scale is saved apart for PC and phone (UITheme.ScalePC / ScaleMobile)
                 local _mobileScale = 1
                 if IsMobile then
                     local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2New(677, 644)
-                    local scaleX = (vp.X * 0.92) / 677
-                    local scaleY = (vp.Y * 0.85) / 644
+                    local scaleX = (vp.X * 0.70) / 677
+                    local scaleY = (vp.Y * 0.65) / 644
                     _mobileScale = math.min(scaleX, scaleY, 1)
-                    if _mobileScale < 0.35 then _mobileScale = 0.35 end
+                    if _mobileScale < 0.3 then _mobileScale = 0.3 end
                 end
+                Window.DefaultScale = _mobileScale
+                local _saved = tonumber(UITheme[IsMobile and "ScaleMobile" or "ScalePC"])
+                if _saved then _mobileScale = math.clamp(_saved, 0.3, 1.5) end
+                Window.BaseScale = _mobileScale
                 Items["UIScale"] = Instances:Create("UIScale", {
                     Parent = Items["MainFrame"].Instance,
                     Name = "\0",
@@ -3801,8 +3808,9 @@ local Library do
 
                 function Window:SetScale(n)
                     n = tonumber(n) or 1
-                    if n < 0.5 then n = 0.5 end
+                    if n < 0.3 then n = 0.3 end
                     if n > 1.5 then n = 1.5 end
+                    Window.BaseScale = n
                     if Items["UIScale"] then
                         Items["UIScale"].Instance.Scale = n
                     end
@@ -4208,6 +4216,24 @@ local Library do
                     end
                 })
 
+                -- the player sizes the window; PC and phone keep their own value
+                Settings:Slider({
+                    Name = "UI Scale" .. (IsMobile and " (Mobile)" or " (PC)"),
+                    Default = math.floor((Window.BaseScale or 1) * 100 + 0.5) / 100,
+                    Decimals = 0.01,
+                    Max = 1.5,
+                    Min = 0.3,
+                    Suffix = "x",
+                    Flag = "HV_UIScale",
+                    Callback = function(Value)
+                        Value = tonumber(Value) or 1
+                        if math.abs(Value - (Window.BaseScale or 1)) < 0.001 then return end
+                        Window:SetScale(Value)
+                        UITheme[IsMobile and "ScaleMobile" or "ScalePC"] = Value
+                        SaveUITheme()
+                    end
+                })
+
                 Window.Items = Items
                 Library._Window = Window
             end
@@ -4374,7 +4400,8 @@ local Library do
                         if Home then
                             WScale.Scale = Tiny
                             Main.Position = FlyPos(Tiny)
-                            TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+                            -- back to this device's scale (phones are smaller), not 1
+                            TS:Create(WScale, TweenInfo.new(Speed, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = Window.BaseScale or 1 }):Play()
                             TS:Create(Main, TweenInfo.new(Speed, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = Home }):Play()
                         end
                         Orig(Window, true)
@@ -4404,7 +4431,7 @@ local Library do
                     Window.SetOpen = Orig
                     Window._Pill = nil
                     if Home and not Window.IsOpen then Main.Position = Home end
-                    WScale.Scale = 1
+                    WScale.Scale = Window.BaseScale or 1
                     B:Destroy()
                 end
                 Pill.Always = Data.Always
