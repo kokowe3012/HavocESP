@@ -885,6 +885,14 @@ local Library do
         return getcustomasset(self.Folders.Assets .. "/" .. ImageData[1])
     end
 
+    -- dropdown / colorpicker popups live in Library.Holder, outside the window: closing the window
+    -- must close them too or the option list stays floating on screen (Trench: Target Mode list)
+    Library.CloseOpenFrames = function(self)
+        for _, Frame in pairs(Library.OpenFrames) do
+            pcall(function() Frame:SetOpen(false) end)
+        end
+    end
+
     Library.Round = function(self, Number, Float)
         local Multiplier = 1 / (Float or 1)
         return MathFloor(Number * Multiplier) / Multiplier
@@ -4292,10 +4300,12 @@ local Library do
 
                 Window.IsOpen = Bool
 
-                Debounce = true 
+                Debounce = true
 
-                if Window.IsOpen then 
-                    Items["MainFrame"].Instance.Visible = true 
+                if not Bool then Library:CloseOpenFrames() end
+
+                if Window.IsOpen then
+                    Items["MainFrame"].Instance.Visible = true
                 end
 
                 local Descendants = Items["MainFrame"].Instance:GetDescendants()
@@ -4428,6 +4438,7 @@ local Library do
                 local Tiny = 0.03
                 function Window:SetOpen(Bool)
                     if Debounce or Busy then return end
+                    if not Bool then Library:CloseOpenFrames() end
                     local Speed = 0.42
                     if Bool then
                         -- spit out: the pill swells, the window shoots out of it and overshoots a little
