@@ -1096,6 +1096,43 @@ local Library do
         and MousePosition.Y >= Frame.AbsolutePosition.Y and MousePosition.Y <= Frame.AbsolutePosition.Y + Frame.AbsoluteSize.Y
     end
 
+    -- Mouse: run Fn at once (unchanged). Touch: run Fn on release only if the finger stayed put
+    -- (<= 12 px, < 0.8 s). Controls used to fire on touch-down, so scrolling a page on a phone
+    -- flipped every toggle the finger started on (customer report 2026-10-11, DungeonLoot).
+    Library.OnTap = function(self, Input, Fn)
+        if Input.UserInputType ~= Enum.UserInputType.Touch then
+            Fn()
+            return
+        end
+        local Start = Input.Position
+        local MaxMove = 0
+        local T0 = os.clock()
+        local Moved, Ended
+        Moved = UserInputService.InputChanged:Connect(function(I)
+            if I == Input then
+                local D = (I.Position - Start).Magnitude
+                if D > MaxMove then MaxMove = D end
+            end
+        end)
+        Ended = UserInputService.InputEnded:Connect(function(I)
+            if I == Input then
+                Moved:Disconnect()
+                Ended:Disconnect()
+                local D = (I.Position - Start).Magnitude
+                if D > MaxMove then MaxMove = D end
+                if MaxMove <= 12 and os.clock() - T0 < 0.8 then
+                    Fn()
+                end
+            end
+        end)
+        task.delay(3, function()
+            if Ended.Connected then
+                Moved:Disconnect()
+                Ended:Disconnect()
+            end
+        end)
+    end
+
     Library.Lerp = function(self, Start, Finish, Time)
         return Start + (Finish - Start) * Time
     end
@@ -6356,10 +6393,12 @@ local Library do
             Items["Toggle"]:Connect("InputBegan", function(Input)
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then 
                     if Items["SettingsIcon"] and Library:IsMouseOverFrame(Items["SettingsIcon"]) then
-                        return 
+                        return
                     end
-                    
-                    Toggle:Set(not Toggle.Value)
+
+                    Library:OnTap(Input, function()
+                        Toggle:Set(not Toggle.Value)
+                    end)
                 end
             end)
 
@@ -6516,7 +6555,7 @@ local Library do
             -- InputBegan แทน MouseButton1Down/TouchTap — เหตุผลเดียวกับ Page tab click (ดูคอมเมนต์ที่นั่น)
             Items["Button"]:Connect("InputBegan", function(Input)
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                    Button:Press()
+                    Library:OnTap(Input, function() Button:Press() end)
                 end
             end)
 
@@ -6754,7 +6793,38 @@ local Library do
             local InputChanged 
             
             Items["RealSlider"]:Connect("InputBegan", function(Input)
-                if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                -- Touch: a vertical swipe over the slider is a page scroll, not a value change.
+                -- Start sliding only once the finger moves sideways; a plain tap sets the value
+                -- where it lands (customer report 2026-10-11).
+                if Input.UserInputType == Enum.UserInputType.Touch and not Slider.Sliding then
+                    local Start = Input.Position
+                    local Decided = false
+                    local Moved, Ended
+                    local function SetAt(X)
+                        local SizeX = (X - Items["RealSlider"].Instance.AbsolutePosition.X) / Items["RealSlider"].Instance.AbsoluteSize.X
+                        Slider:Set(((Slider.Max - Slider.Min) * SizeX) + Slider.Min)
+                    end
+                    Moved = UserInputService.InputChanged:Connect(function(I)
+                        if I ~= Input or Decided then return end
+                        local D = I.Position - Start
+                        if math.abs(D.X) > 8 and math.abs(D.X) > math.abs(D.Y) then
+                            Decided = true
+                            Slider.Sliding = true
+                            SetAt(I.Position.X)
+                        elseif math.abs(D.Y) > 8 then
+                            Decided = true
+                        end
+                    end)
+                    Ended = UserInputService.InputEnded:Connect(function(I)
+                        if I ~= Input then return end
+                        Moved:Disconnect()
+                        Ended:Disconnect()
+                        if not Decided then SetAt(I.Position.X) end
+                        Slider.Sliding = false
+                    end)
+                    return
+                end
+                if Input.UserInputType == Enum.UserInputType.MouseButton1 then
                     Slider.Sliding = true
 
                     local SizeX = (Input.Position.X - Items["RealSlider"].Instance.AbsolutePosition.X) / Items["RealSlider"].Instance.AbsoluteSize.X
@@ -7397,7 +7467,7 @@ local Library do
                 OptionData.Button:Connect("InputBegan", function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseButton1
                        or Input.UserInputType == Enum.UserInputType.Touch then
-                        OptionData:Set()
+                        Library:OnTap(Input, function() OptionData:Set() end)
                     end
                 end)
 
@@ -7445,7 +7515,7 @@ local Library do
             Items["RealDropdown"]:Connect("InputBegan", function(Input)
                 if Input.UserInputType == Enum.UserInputType.MouseButton1
                    or Input.UserInputType == Enum.UserInputType.Touch then
-                    Dropdown:SetOpen(not Dropdown.IsOpen)
+                    Library:OnTap(Input, function() Dropdown:SetOpen(not Dropdown.IsOpen) end)
                 end
             end)
 
@@ -8815,7 +8885,7 @@ local Library do
                 OptionData.Button:Connect("InputBegan", function(Input)
                     if Input.UserInputType == Enum.UserInputType.MouseButton1
                        or Input.UserInputType == Enum.UserInputType.Touch then
-                        OptionData:Set()
+                        Library:OnTap(Input, function() OptionData:Set() end)
                     end
                 end)
 
