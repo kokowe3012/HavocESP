@@ -3151,10 +3151,13 @@ local Library do
                     B.Visible = not Shown or table.find(Shown, K) ~= nil
                 end
                 -- a tab change: the content slides in from the right like the hub's pages
+                -- (slide to each element's resting position, not its current one: a second tab change mid-slide
+                -- used to take the shifted spot as home and leave the content stuck 40 px to the right)
                 if LastTab and LastTab ~= Key then
                     local Ti = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+                    P.Home = P.Home or { [Grid] = Grid.Position, [Req] = Req.Position, [ReqTitle] = ReqTitle.Position }
                     for _, O in { Grid, Req, ReqTitle } do
-                        local To = O.Position
+                        local To = P.Home[O]
                         O.Position = To + UDim2New(0, 40, 0, 0)
                         TS:Create(O, Ti, { Position = To }):Play()
                     end
@@ -3221,6 +3224,7 @@ local Library do
             function P:SetCompact(On)
                 Grid.Size = UDim2New(1, -26, 0, On and 336 or 142)
                 ReqTitle.Position = UDim2New(0, 16, 0, On and 432 or 238)
+                if P.Home then P.Home[ReqTitle] = ReqTitle.Position end
                 Req.Visible, Mid.Visible = not On, not On
             end
 
