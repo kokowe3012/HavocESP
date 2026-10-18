@@ -3174,6 +3174,21 @@ local Library do
                 for _, Ch in Grid:GetChildren() do if Ch:IsA("GuiObject") then Ch:Destroy() end end
                 for I, It in List do
                     local Picked = It.Picked
+                    if P.Split then
+                        -- split layout: one row per item (icon | name + sub | state on the right)
+                        local Row = Corner(New("TextButton", { BackgroundColor3 = Picked and C.blue or FromRGB(255, 255, 255), BackgroundTransparency = Picked and 0.82 or 0.96,
+                            Text = "", LayoutOrder = I, AutoButtonColor = false }, Grid), 10)
+                        Stroke(Row, Picked and C.blue or FromRGB(255, 255, 255), Picked and 0.2 or 0.92, 1)
+                        Corner(New("ImageLabel", { Size = UDim2New(0, 32, 0, 32), Position = UDim2New(0, 8, 0.5, -16), BackgroundColor3 = FromRGB(0, 0, 0),
+                            BackgroundTransparency = 0.5, Image = It.Icon or "", ScaleType = Enum.ScaleType.Fit }, Row), 8)
+                        Text(Row, tostring(It.Name or ""), 12, C.white, { Font = Enum.Font.GothamBold, Position = UDim2New(0, 48, 0, 6), Size = UDim2New(1, -140, 0, 18),
+                            TextTruncate = Enum.TextTruncate.AtEnd })
+                        Text(Row, tostring(It.Sub or ""), 11, C.muted, { Position = UDim2New(0, 48, 0, 24), Size = UDim2New(1, -140, 0, 16), TextTruncate = Enum.TextTruncate.AtEnd })
+                        Text(Row, tostring(It.State or ""), 11, It.StateColor or C.muted, { Font = Enum.Font.GothamMedium, Position = UDim2New(1, -92, 0, 0),
+                            Size = UDim2New(0, 84, 1, 0), TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd })
+                        Row.MouseButton1Click:Connect(function() if Data.OnCard then Data.OnCard(It.Key) end end)
+                        continue
+                    end
                     local Card = Corner(New("TextButton", { BackgroundColor3 = Picked and C.blue or FromRGB(255, 255, 255), BackgroundTransparency = Picked and 0.85 or 0.95,
                         Text = "", LayoutOrder = I, AutoButtonColor = false }, Grid), 12)
                     Stroke(Card, Picked and C.blue or FromRGB(255, 255, 255), Picked and 0 or 0.9, Picked and 2 or 1)
@@ -3195,6 +3210,18 @@ local Library do
             function P:SetReqs(List)
                 for _, Ch in Req:GetChildren() do if Ch:IsA("GuiObject") then Ch:Destroy() end end
                 for _, R in List do
+                    if P.Split then
+                        -- split layout: icon | name | stock text on the right (no bar: the column is narrow)
+                        local Row = New("Frame", { Size = UDim2New(1, 0, 0, 28), BackgroundTransparency = 1 }, Req)
+                        local Ic = Corner(New("ImageLabel", { Size = UDim2New(0, 24, 0, 24), Position = UDim2New(0, 0, 0, 2), BackgroundColor3 = FromRGB(255, 255, 255),
+                            BackgroundTransparency = 0.94, Image = R.Icon or "" }, Row), 12)
+                        if (R.Icon or "") == "" then Text(Ic, R.Fallback or "?", 12, C.white, { Size = UDim2New(1, 0, 1, 0), TextXAlignment = Enum.TextXAlignment.Center }) end
+                        Text(Row, tostring(R.Name or ""), 12, C.soft, { Position = UDim2New(0, 32, 0, 0), Size = UDim2New(1, -140, 0, 28), TextTruncate = Enum.TextTruncate.AtEnd })
+                        local Have, Need = tonumber(R.Have) or 0, tonumber(R.Need) or 0
+                        Text(Row, R.Text or ("%d / %d"):format(Have, Need), 12, Have >= math.max(Need, 1) and C.ok or C.miss, { Font = Enum.Font.GothamMedium,
+                            Position = UDim2New(1, -108, 0, 0), Size = UDim2New(0, 108, 0, 28), TextXAlignment = Enum.TextXAlignment.Right })
+                        continue
+                    end
                     local Row = New("Frame", { Size = UDim2New(1, 0, 0, 28), BackgroundTransparency = 1 }, Req)
                     local Ic = Corner(New("ImageLabel", { Size = UDim2New(0, 24, 0, 24), Position = UDim2New(0, 0, 0, 2), BackgroundColor3 = FromRGB(255, 255, 255),
                         BackgroundTransparency = 0.94, Image = R.Icon or "" }, Row), 12)
@@ -3226,6 +3253,56 @@ local Library do
                 ReqTitle.Position = UDim2New(0, 16, 0, On and 432 or 238)
                 if P.Home then P.Home[ReqTitle] = ReqTitle.Position end
                 Req.Visible, Mid.Visible = not On, not On
+            end
+            -- Split layout (opt-in, 2026-10-19): list of rows on the left, detail column on the right
+            -- (chips -> stat boxes -> requirement rows), footer + buttons stay at the bottom. Off = the old layout.
+            local Split = {}
+            function P:SetSplit(On, Labels)
+                P.Split = On and true or false
+                Labels = Labels or {}
+                if not Split.V then
+                    Split.V = New("Frame", { Size = UDim2New(0, 1, 0, 394), Position = UDim2New(0, 300, 0, 60), BackgroundColor3 = FromRGB(255, 255, 255),
+                        BackgroundTransparency = 0.92, BorderSizePixel = 0 }, Win)
+                    Split.L = Text(Win, "", 11, C.muted, { Font = Enum.Font.GothamMedium, Position = UDim2New(0, 16, 0, 60), Size = UDim2New(0, 270, 0, 16) })
+                    Split.R = Text(Win, "", 11, C.muted, { Font = Enum.Font.GothamMedium, Position = UDim2New(0, 314, 0, 60), Size = UDim2New(0, 270, 0, 16) })
+                    Split.Stats = New("Frame", { Size = UDim2New(0, 270, 0, 54), Position = UDim2New(0, 314, 0, 120), BackgroundTransparency = 1 }, Win)
+                    New("UIGridLayout", { CellSize = UDim2New(0.5, -4, 1, 0), CellPadding = UDim2New(0, 8, 0, 0), SortOrder = Enum.SortOrder.LayoutOrder }, Split.Stats)
+                    for _, D in Win:GetDescendants() do Boost(D) end
+                end
+                Split.V.Visible, Split.L.Visible, Split.R.Visible, Split.Stats.Visible = P.Split, P.Split, P.Split, P.Split
+                Split.L.Text, Split.R.Text = Labels.Left or "", Labels.Right or ""
+                local Lay = Grid:FindFirstChildOfClass("UIGridLayout")
+                if P.Split then
+                    Grid.Position, Grid.Size = UDim2New(0, 13, 0, 78), UDim2New(0, 280, 0, 376)
+                    Lay.CellSize, Lay.CellPadding = UDim2New(1, -6, 0, 46), UDim2New(0, 0, 0, 6)
+                    ChipRow.Position, ChipRow.Size = UDim2New(0, 314, 0, 80), UDim2New(0, 270, 0, 28)
+                    local N = 0
+                    for _ in Chips do N += 1 end
+                    for _, B in Chips do B.Size = UDim2New(0, math.floor((270 - 6 * (N - 1)) / math.max(N, 1)), 0, 28) end
+                    ReqTitle.Position, ReqTitle.Size = UDim2New(0, 314, 0, 184), UDim2New(0, 270, 0, 20)
+                    Req.Position, Req.Size = UDim2New(0, 314, 0, 208), UDim2New(0, 270, 0, 150)
+                    Mid.Visible = false
+                else
+                    Grid.Position, Grid.Size = UDim2New(0, 13, 0, 88), UDim2New(1, -26, 0, 142)
+                    Lay.CellSize, Lay.CellPadding = UDim2New(0, 102, 0, 132), UDim2New(0, 8, 0, 8)
+                    ChipRow.Position, ChipRow.Size = UDim2New(0, 16, 0, 56), UDim2New(1, -32, 0, 26)
+                    for _, B in Chips do B.Size = UDim2New(0, 78, 0, 26) end
+                    ReqTitle.Position, ReqTitle.Size = UDim2New(0, 16, 0, 238), UDim2New(1, -160, 0, 20)
+                    Req.Position, Req.Size = UDim2New(0, 16, 0, 260), UDim2New(1, -32, 0, 196)
+                    Mid.Visible = true
+                end
+                P.Home = nil
+            end
+            -- split layout: the two stat boxes under the chips ({Label, Value, Color})
+            function P:SetStats(List)
+                if not Split.Stats then return end
+                for _, Ch in Split.Stats:GetChildren() do if Ch:IsA("GuiObject") then Ch:Destroy() end end
+                for I, S in List or {} do
+                    local Box = Corner(New("Frame", { LayoutOrder = I, BackgroundColor3 = FromRGB(255, 255, 255), BackgroundTransparency = 0.95 }, Split.Stats), 10)
+                    Text(Box, tostring(S.Label or ""), 11, C.muted, { Position = UDim2New(0, 10, 0, 6), Size = UDim2New(1, -20, 0, 14) })
+                    Text(Box, tostring(S.Value or ""), 15, S.Color or C.white, { Font = Enum.Font.GothamBold, Position = UDim2New(0, 10, 0, 22), Size = UDim2New(1, -20, 0, 24),
+                        TextTruncate = Enum.TextTruncate.AtEnd })
+                end
             end
 
             -- drag by the header
