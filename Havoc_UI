@@ -2863,7 +2863,26 @@ local Library do
             local Full = New("CanvasGroup", { AnchorPoint = Vector2New(0.5, 0.5), Position = UDim2New(0.5, 0, 0.5, 0), Size = UDim2New(0, 740, 0, 0),
                 AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, GroupTransparency = 1, ZIndex = 6 }, Black)
             New("UIListLayout", { Padding = UDimNew(0, 14), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }, Full)
-            New("UIScale", { Scale = math.clamp((Vs.X - 24) / 800, 0.5, 1) }, Full)
+            -- fits width AND height (phones in landscape are short: the panel ran off the bottom, 2026-10-19), redone
+            -- when the content grows (game fills .Extra) or the screen changes
+            local FullScale = New("UIScale", { Scale = math.clamp((Vs.X - 24) / 800, 0.5, 1) }, Full)
+            local function FitFull()
+                local Cam = workspace.CurrentCamera
+                if not Cam then return end
+                local V = Cam.ViewportSize
+                local Inset = 0
+                pcall(function() Inset = game:GetService("GuiService"):GetGuiInset().Y end)
+                local Cur = FullScale.Scale
+                local H = (Cur > 0) and (Full.AbsoluteSize.Y / Cur) or 0
+                local K = (V.X - 24) / 800
+                -- the black screen's own height when it is laid out (covers the screen, inset or not)
+                local Room = (Black.AbsoluteSize.Y > 0) and Black.AbsoluteSize.Y or (V.Y - Inset)
+                if H > 0 then K = math.min(K, (Room - 24) / H) end
+                FullScale.Scale = math.clamp(K, 0.3, 1)
+            end
+            Full:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(FitFull) end)
+            Black:GetPropertyChangedSignal("Visible"):Connect(function() task.defer(FitFull) end)
+            pcall(function() workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(FitFull) end)
             New("UIPadding", { PaddingTop = UDimNew(0, 4), PaddingBottom = UDimNew(0, 6) }, Full)
             local function Center(Order, Size, Col, Font, H)
                 return Text(Full, Size, Col, { LayoutOrder = Order, Size = UDim2New(1, 0, 0, H or (Size + 6)), TextXAlignment = Enum.TextXAlignment.Center,
