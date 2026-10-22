@@ -4586,15 +4586,8 @@ local Library do
                 end
 
                 -- drag the pill anywhere (customer 2026-10-22: it covered the game's Sell buttons). A move of more than
-                -- 6 px is a drag, not a tap. The spot is kept per window name in a file (reloads / teleports keep it).
-                -- one spot per game (every hub window is called "Terdsak Hub")
-                local PosFile = "HV_PillPos_" .. tostring(game.GameId) .. ".txt"
-                pcall(function()
-                    if isfile and isfile(PosFile) then
-                        local x, y = readfile(PosFile):match("^(-?[%d%.]+),(-?[%d%.]+)$")
-                        if x then B.Position = UDim2New(0, tonumber(x), 0, tonumber(y)) end
-                    end
-                end)
+                -- 6 px is a drag, not a tap. The spot is not saved: every load starts at the top centre
+                -- (a saved spot could land off screen after a resize / rotation and the pill was lost, 2026-10-22).
                 local DragStart, DragFrom, Dragged, DragEndAt = nil, nil, false, 0
                 B.InputBegan:Connect(function(I)
                     if I.UserInputType == Enum.UserInputType.MouseButton1 or I.UserInputType == Enum.UserInputType.Touch then
@@ -4619,7 +4612,6 @@ local Library do
                         local X = B.Position.X.Scale * P.X + B.Position.X.Offset
                         local Y = B.Position.Y.Scale * P.Y + B.Position.Y.Offset
                         B.Position = UDim2New(0, X, 0, Y)
-                        pcall(function() if writefile then writefile(PosFile, ("%d,%d"):format(X, Y)) end end)
                         -- the click that follows the release is not a tap
                         DragEndAt = os.clock()
                         Dragged = false
