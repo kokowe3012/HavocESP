@@ -2911,8 +2911,19 @@ local Library do
             Stroke(Back, 0.8)
             Card.BackButton = Back
 
+            local IdleConn
             local function Set3d(On)
                 pcall(function() RunService:Set3dRenderingEnabled(On) end)
+                -- black is left on for hours (AFK farm): answer Roblox's 20 min idle kick while it is up
+                if IdleConn then IdleConn:Disconnect() IdleConn = nil end
+                if not On then
+                    pcall(function()
+                        local VU = game:GetService("VirtualUser")
+                        IdleConn = Players.LocalPlayer.Idled:Connect(function()
+                            pcall(function() VU:CaptureController() VU:ClickButton2(Vector2.new()) end)
+                        end)
+                    end)
+                end
                 -- black = a free mouse cursor: games lock / hide it every frame, so it is unlocked every frame
                 pcall(function() RunService:UnbindFromRenderStep("HV_BlackCursor") end)
                 if not On then
