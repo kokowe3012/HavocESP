@@ -4574,8 +4574,52 @@ local Library do
                     end
                 end
 
-                B.MouseButton1Click:Connect(function() Window:SetOpen(Data.Always and not Window.IsOpen or not Data.Always) end)
+                -- drag the pill anywhere (customer 2026-10-22: it covered the game's Sell buttons). A move of more than
+                -- 6 px is a drag, not a tap. The spot is kept per window name in a file (reloads / teleports keep it).
+                -- one spot per game (every hub window is called "Terdsak Hub")
+                local PosFile = "HV_PillPos_" .. tostring(game.GameId) .. ".txt"
+                pcall(function()
+                    if isfile and isfile(PosFile) then
+                        local x, y = readfile(PosFile):match("^(-?[%d%.]+),(-?[%d%.]+)$")
+                        if x then B.Position = UDim2New(0, tonumber(x), 0, tonumber(y)) end
+                    end
+                end)
+                local DragStart, DragFrom, Dragged, DragEndAt = nil, nil, false, 0
+                B.InputBegan:Connect(function(I)
+                    if I.UserInputType == Enum.UserInputType.MouseButton1 or I.UserInputType == Enum.UserInputType.Touch then
+                        DragStart, DragFrom, Dragged = I.Position, B.Position, false
+                    end
+                end)
+                local DragMove = UserInputService.InputChanged:Connect(function(I)
+                    if not DragStart then return end
+                    if I.UserInputType ~= Enum.UserInputType.MouseMovement and I.UserInputType ~= Enum.UserInputType.Touch then return end
+                    local D = I.Position - DragStart
+                    if not Dragged and D.Magnitude < 6 then return end
+                    Dragged = true
+                    B.Position = UDim2New(DragFrom.X.Scale, DragFrom.X.Offset + D.X, DragFrom.Y.Scale, DragFrom.Y.Offset + D.Y)
+                end)
+                local DragEnd = UserInputService.InputEnded:Connect(function(I)
+                    if not DragStart then return end
+                    if I.UserInputType ~= Enum.UserInputType.MouseButton1 and I.UserInputType ~= Enum.UserInputType.Touch then return end
+                    DragStart = nil
+                    if Dragged then
+                        -- saved as plain offsets from the parent's top-left (scale folded in)
+                        local P = B.Parent and B.Parent.AbsoluteSize or Vector2New(0, 0)
+                        local X = B.Position.X.Scale * P.X + B.Position.X.Offset
+                        local Y = B.Position.Y.Scale * P.Y + B.Position.Y.Offset
+                        B.Position = UDim2New(0, X, 0, Y)
+                        pcall(function() if writefile then writefile(PosFile, ("%d,%d"):format(X, Y)) end end)
+                        -- the click that follows the release is not a tap
+                        DragEndAt = os.clock()
+                        Dragged = false
+                    end
+                end)
+                B.MouseButton1Click:Connect(function()
+                    if Dragged or os.clock() - DragEndAt < 0.25 then return end
+                    Window:SetOpen(Data.Always and not Window.IsOpen or not Data.Always)
+                end)
                 function Pill:Destroy()
+                    pcall(function() DragMove:Disconnect() DragEnd:Disconnect() end)
                     Window.SetOpen = Orig
                     Window._Pill = nil
                     if Home and not Window.IsOpen then Main.Position = Home end
